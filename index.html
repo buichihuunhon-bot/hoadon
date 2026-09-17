@@ -25,7 +25,7 @@
         body { background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; font-size: 13px; }
         .container { max-width: 1200px; margin: 0 auto; }
 
-        /* Auth View - Đã tối giản bảo mật */
+        /* Auth View */
         .auth-card { max-width: 380px; margin: 100px auto; background: var(--panel); border: 1px solid var(--border); padding: 30px; border-radius: 6px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .auth-card h2 { margin-top: 0; font-size: 18px; text-align: center; color: var(--primary); }
         .form-group { margin-bottom: 15px; }
@@ -48,7 +48,7 @@
 
         /* Summary Bar */
         .summary-bar { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 20px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .summary-item { display: flex; align-items: center; gap: 8px; font-size: 19px; }
+        .summary-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
         .summary-item .label { color: var(--subtext); font-weight: 600; }
         .summary-item .val { font-weight: 700; font-size: 15px; color: var(--primary); }
         .summary-item .val.highlight { color: #2563eb; }
@@ -103,20 +103,17 @@
 
 <div class="container">
 
-    <!-- 1. MÀN HÌNH ĐĂNG NHẬP (CHỈ CÓ USER + PASS) -->
+    <!-- 1. MÀN HÌNH ĐĂNG NHẬP -->
     <div id="authScreen" class="auth-card">
         <h2>Đăng Nhập Hệ Thống</h2>
-        
         <div class="form-group">
             <label>Mã Nhân Viên / Kế Toán</label>
             <input type="text" id="username" value="ketoan_01" placeholder="Nhập mã nhân viên">
         </div>
-
         <div class="form-group">
             <label>Mật Khẩu</label>
-            <input type="password" id="password">
+            <input type="password" id="password" placeholder="Mặc định: 123456">
         </div>
-
         <button class="btn" onclick="login()">Vào Hệ Thống</button>
     </div>
 
@@ -134,28 +131,7 @@
             </div>
         </header>
 
-        <!-- CONTROL PANEL & IMPORT -->
-        <div class="control-panel">
-            <div class="import-box">
-                <label><b>Import File (.xlsx):</b></label>
-                <input type="file" id="excelFiles" multiple accept=".xlsx, .xls">
-            </div>
-
-            <div class="filter-box">
-                <div>
-                    <label><b>Ngày HĐ:</b></label>
-                    <select id="dateFilter" onchange="renderDashboard()">
-                        <option value="ALL">-- Tất cả --</option>
-                    </select>
-                </div>
-                <div>
-                    <label><b>Tìm kiếm:</b></label>
-                    <input type="text" id="searchInput" placeholder="Tìm Mã HĐ" onkeyup="renderDashboard()">
-                </div>
-                <button class="btn-danger" onclick="deleteCurrentDateData()">Xóa Dữ Liệu Ngày Chọn</button>
-            </div>
-        </div>
-<!-- THÔNG TIN CHUNG TỔNG QUAN -->
+        <!-- THÔNG TIN CHUNG TỔNG QUAN -->
         <div class="summary-bar">
             <div class="summary-item">
                 <span class="label">Số lượng HĐ:</span>
@@ -174,6 +150,29 @@
                 <span class="val highlight" id="sumChuyenKhoan">0 đ</span>
             </div>
         </div>
+
+        <!-- CONTROL PANEL & IMPORT -->
+        <div class="control-panel">
+            <div class="import-box">
+                <label><b>Import File (.xlsx):</b></label>
+                <input type="file" id="excelFiles" multiple accept=".xlsx, .xls">
+            </div>
+
+            <div class="filter-box">
+                <div>
+                    <label><b>Ngày HĐ:</b></label>
+                    <select id="dateFilter" onchange="renderDashboard()">
+                        <option value="ALL">-- Tất cả --</option>
+                    </select>
+                </div>
+                <div>
+                    <label><b>Tìm kiếm:</b></label>
+                    <input type="text" id="searchInput" placeholder="Tìm Mã HĐ / SĐT / Tên..." onkeyup="renderDashboard()">
+                </div>
+                <button class="btn-danger" onclick="deleteCurrentDateData()">Xóa Dữ Liệu Ngày Chọn</button>
+            </div>
+        </div>
+
         <!-- DASHBOARD TỔNG QUAN -->
         <table id="dashboardTable">
             <thead>
@@ -191,7 +190,7 @@
             </tbody>
         </table>
 
-        <!-- BẢO MẬT & ĐỒNG BỘ GITHUB GIST (ĐẶT Ở GÓC DƯỚI BÊN TRONG HỆ THỐNG) -->
+        <!-- BẢO MẬT & ĐỒNG BỘ GITHUB GIST -->
         <div class="footer-config">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <button type="button" class="btn-link" onclick="toggleConfig()" style="font-weight: 600; text-decoration: none;">
@@ -706,7 +705,7 @@
         }
     }
 
-    // --- CHỦ ĐỘNG ĐỒNG BỘ CLOUD (PUSH / PULL) ---
+    // --- ĐỒNG BỘ CLOUD (ĐÃ TỐI ƯU HÀM PULL & PUSH) ---
     async function syncDataToCloud() {
         if (!gistConfig.token || !gistConfig.id) {
             alert('Vui lòng nhập Token và Gist ID ở góc dưới trước!');
@@ -723,12 +722,14 @@
                 }
             };
 
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `token ${gistConfig.token}`
+            };
+
             const res = await fetch(`https://api.github.com/gists/${gistConfig.id}`, {
                 method: 'PATCH',
-                headers: {
-                    'Authorization': `token ${gistConfig.token}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: headers,
                 body: JSON.stringify(payload)
             });
 
@@ -736,28 +737,51 @@
                 document.getElementById('syncStatus').innerText = 'Đã tải lên Cloud';
                 alert('Đã tải thành công toàn bộ dữ liệu lên GitHub Gist!');
             } else {
-                throw new Error('Lỗi từ phía API');
+                const errData = await res.json();
+                throw new Error(errData.message || `Lỗi HTTP ${res.status}`);
             }
         } catch (e) {
             document.getElementById('syncStatus').innerText = 'Lỗi tải lên Cloud';
-            alert('Tải lên thất bại! Vui lòng kiểm tra lại Token và Gist ID.');
+            alert(`Tải lên thất bại! Chi tiết: ${e.message}`);
         }
     }
 
     async function loadDataFromCloud() {
-        if (!gistConfig.token || !gistConfig.id) {
-            alert('Vui lòng nhập Token và Gist ID ở góc dưới trước!');
+        if (!gistConfig.id) {
+            alert('Vui lòng nhập Gist ID ở góc dưới trước!');
             return;
         }
 
         document.getElementById('syncStatus').innerText = 'Đang tải xuống...';
         try {
-            const res = await fetch(`https://api.github.com/gists/${gistConfig.id}`, {
-                headers: { 'Authorization': `token ${gistConfig.token}` }
+            // Linh hoạt header: gửi token nếu có
+            const headers = {};
+            if (gistConfig.token) {
+                headers['Authorization'] = `token ${gistConfig.token}`;
+            }
+
+            const res = await fetch(`https://api.github.com/gists/${gistConfig.id}?_t=${Date.now()}`, {
+                headers: headers
             });
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.message || `Mã lỗi HTTP ${res.status}`);
+            }
+
             const data = await res.json();
+            
+            // Tìm file kiotviet_data.json hoặc lấy file json đầu tiên nếu chưa đặt đúng tên
+            let jsonContent = null;
             if (data.files && data.files["kiotviet_data.json"]) {
-                const content = JSON.parse(data.files["kiotviet_data.json"].content);
+                jsonContent = data.files["kiotviet_data.json"].content;
+            } else if (data.files) {
+                const firstKey = Object.keys(data.files).find(k => k.endsWith('.json'));
+                if (firstKey) jsonContent = data.files[firstKey].content;
+            }
+
+            if (jsonContent) {
+                const content = JSON.parse(jsonContent);
                 billStore = content.billStore || {};
                 rawStore = content.rawStore || [];
                 saveToLocalStorage();
@@ -766,11 +790,11 @@
                 document.getElementById('syncStatus').innerText = 'Đã cập nhật từ Cloud';
                 alert('Đã tải xuống và cập nhật dữ liệu thành công!');
             } else {
-                throw new Error('Không tìm thấy file dữ liệu');
+                throw new Error('Chưa có dữ liệu nào trên Gist này. Hãy ấn "Tải lên Cloud" từ máy chính trước!');
             }
         } catch (e) {
             document.getElementById('syncStatus').innerText = 'Lỗi tải xuống';
-            alert('Tải xuống thất bại! Vui lòng kiểm tra lại cấu hình.');
+            alert(`Tải xuống thất bại! Chi tiết: ${e.message}`);
         }
     }
 
