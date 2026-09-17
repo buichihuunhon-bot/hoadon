@@ -754,24 +754,30 @@
 
         document.getElementById('syncStatus').innerText = 'Đang tải xuống...';
         try {
-            // Linh hoạt header: gửi token nếu có
-            const headers = {};
+            // Tối ưu Header để bypass CORS và Cache
+            const headers = {
+                'Accept': 'application/vnd.github.v3+json'
+            };
+            
             if (gistConfig.token) {
                 headers['Authorization'] = `token ${gistConfig.token}`;
             }
 
-            const res = await fetch(`https://api.github.com/gists/${gistConfig.id}?_t=${Date.now()}`, {
+            // Thêm timestamp đằng sau URL để ép trình duyệt gọi dữ liệu mới nhất
+            const cacheBuster = new Date().getTime();
+            const res = await fetch(`https://api.github.com/gists/${gistConfig.id}?t=${cacheBuster}`, {
+                method: 'GET',
                 headers: headers
             });
 
             if (!res.ok) {
-                const errData = await res.json();
+                const errData = await res.json().catch(() => ({}));
                 throw new Error(errData.message || `Mã lỗi HTTP ${res.status}`);
             }
 
             const data = await res.json();
             
-            // Tìm file kiotviet_data.json hoặc lấy file json đầu tiên nếu chưa đặt đúng tên
+            // Đọc nội dung file JSON từ Gist
             let jsonContent = null;
             if (data.files && data.files["kiotviet_data.json"]) {
                 jsonContent = data.files["kiotviet_data.json"].content;
@@ -784,13 +790,15 @@
                 const content = JSON.parse(jsonContent);
                 billStore = content.billStore || {};
                 rawStore = content.rawStore || [];
+                
                 saveToLocalStorage();
                 updateDateDropdown();
                 renderDashboard();
+                
                 document.getElementById('syncStatus').innerText = 'Đã cập nhật từ Cloud';
                 alert('Đã tải xuống và cập nhật dữ liệu thành công!');
             } else {
-                throw new Error('Chưa có dữ liệu nào trên Gist này. Hãy ấn "Tải lên Cloud" từ máy chính trước!');
+                throw new Error('Chưa có dữ liệu trên Cloud. Hãy bấm "Tải lên Cloud" từ máy chính trước!');
             }
         } catch (e) {
             document.getElementById('syncStatus').innerText = 'Lỗi tải xuống';
