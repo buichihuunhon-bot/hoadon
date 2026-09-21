@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Đối Chiếu Hóa Đơn KiotViet - Dành Cho Kế Toán</title>
-    <!-- Thư viện đọc Excel SheetJS -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- SheetJS 0.20.3, lưu cùng ứng dụng để đọc Excel khi ngoại tuyến -->
+    <script src="xlsx.full.min.js"></script>
     <style>
         :root {
             --bg: #f8fafc;
@@ -98,6 +98,7 @@
         .table-mini th { font-size: 11px; padding: 6px 8px; }
         .table-mini td { font-size: 12px; padding: 6px 8px; }
     </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
@@ -105,114 +106,155 @@
 
     <!-- 1. MÀN HÌNH ĐĂNG NHẬP -->
     <div id="authScreen" class="auth-card">
-        <h2>Đăng Nhập Hệ Thống</h2>
+        <div class="auth-mark">KV</div>
+        <div class="eyebrow">KIOTVIET · KẾ TOÁN</div>
+        <h2>Mở dữ liệu hóa đơn</h2>
+        <p class="auth-subtitle">Nhập mật khẩu để mở dữ liệu được mã hóa trên thiết bị này.</p>
         <div class="form-group">
-            <label>Mã Nhân Viên / Kế Toán</label>
+            <label for="username">Tên người sử dụng</label>
             <input type="text" id="username" value="ketoan_01" placeholder="Nhập mã nhân viên">
         </div>
         <div class="form-group">
-            <label>Mật Khẩu</label>
-            <input type="password" id="password" placeholder="Mặc định: 123456">
+            <label for="password">Mật khẩu dữ liệu</label>
+            <input type="password" id="password" autocomplete="current-password" placeholder="Ít nhất 10 ký tự" onkeydown="if (event.key === 'Enter') login()">
         </div>
-        <button class="btn" onclick="login()">Vào Hệ Thống</button>
+        <p class="auth-help">Lần đầu mở bản mới, hãy đặt mật khẩu và ghi nhớ. Mật khẩu này cũng dùng để đồng bộ Gist; quên mật khẩu sẽ không mở được dữ liệu đã mã hóa.</p>
+        <button class="btn" onclick="login()">Mở dữ liệu <span aria-hidden="true">→</span></button>
+        <button type="button" id="legacyBackupButton" class="btn-link legacy-backup" style="display: none;" onclick="exportLegacyBackup()">Tải bản sao lưu dữ liệu cũ</button>
     </div>
 
     <!-- 2. MÀN HÌNH CHÍNH -->
     <div id="appScreen" style="display: none;">
         <header>
-            <div>
-                <h1 class="app-title">ĐỐI CHIẾU HÓA ĐƠN KIOTVIET</h1>
-                <div style="color: var(--subtext); font-size: 12px;">Hệ thống tổng hợp nội bộ dành cho Kế toán</div>
+            <div class="brand-wrap">
+                <div class="brand-mark">KV</div>
+                <div>
+                    <div class="eyebrow">KHÔNG GIAN LÀM VIỆC</div>
+                    <h1 class="app-title">Đối chiếu hóa đơn</h1>
+                    <div class="app-subtitle">Tổng hợp dữ liệu KiotViet dành cho kế toán</div>
+                </div>
             </div>
             <div class="user-info">
-                <span>Tài khoản: <b id="displayUser">--</b></span> |
-                <span id="syncStatus" style="color: var(--accent);">Lưu trên thiết bị</span> |
+                <span class="user-chip">Người dùng <b id="displayUser">--</b></span>
+                <span id="syncStatus" class="sync-chip" role="status">Lưu mã hóa trên thiết bị</span>
                 <button class="btn-link" onclick="logout()">Đăng xuất</button>
             </div>
         </header>
 
         <!-- THÔNG TIN CHUNG TỔNG QUAN -->
+        <div class="section-heading">
+            <div>
+                <div class="eyebrow">TỔNG QUAN</div>
+                <h2>Tổng quan hóa đơn</h2>
+            </div>
+            <p>Số liệu theo ngày và từ khóa đang chọn</p>
+        </div>
         <div class="summary-bar">
             <div class="summary-item">
-                <span class="label">Số lượng HĐ:</span>
+                <span class="label">Số lượng hóa đơn</span>
                 <span class="val" id="sumCount">0</span>
+                <span class="summary-foot">Hóa đơn phù hợp</span>
             </div>
             <div class="summary-item">
-                <span class="label">Tổng doanh thu:</span>
+                <span class="label">Tổng doanh thu</span>
                 <span class="val highlight" id="sumDoanhThu">0 đ</span>
+                <span class="summary-foot">Theo số tiền khách đã trả</span>
             </div>
             <div class="summary-item">
-                <span class="label">Tiền mặt:</span>
+                <span class="label">Tiền mặt</span>
                 <span class="val success" id="sumTienMat">0 đ</span>
+                <span class="summary-foot">Tổng thanh toán tiền mặt</span>
             </div>
             <div class="summary-item">
-                <span class="label">Chuyển khoản:</span>
+                <span class="label">Chuyển khoản trên bill</span>
                 <span class="val highlight" id="sumChuyenKhoan">0 đ</span>
+                <span class="summary-foot">Chưa bao gồm tip</span>
+            </div>
+            <div class="summary-item">
+                <span class="label">Tip chuyển khoản</span>
+                <span class="val" id="sumTip">0 đ</span>
+                <span class="summary-foot">Ghi riêng để đối soát ngân hàng</span>
+            </div>
+            <div class="summary-item">
+                <span class="label">Ngân hàng dự kiến</span>
+                <span class="val highlight" id="sumBankExpected">0 đ</span>
+                <span class="summary-foot">Chuyển khoản trên bill + tip</span>
             </div>
         </div>
 
         <!-- CONTROL PANEL & IMPORT -->
         <div class="control-panel">
             <div class="import-box">
-                <label><b>Import File (.xlsx):</b></label>
+                <div class="control-heading">
+                    <div class="control-icon">↑</div>
+                    <div><strong>Nhập dữ liệu</strong><span>Chọn một hoặc nhiều file Excel từ KiotViet</span></div>
+                </div>
                 <input type="file" id="excelFiles" multiple accept=".xlsx, .xls">
             </div>
 
             <div class="filter-box">
-                <div>
-                    <label><b>Ngày HĐ:</b></label>
+                <div class="filter-field">
+                    <label for="dateFilter">Ngày hóa đơn</label>
                     <select id="dateFilter" onchange="renderDashboard()">
                         <option value="ALL">-- Tất cả --</option>
                     </select>
                 </div>
-                <div>
-                    <label><b>Tìm kiếm:</b></label>
+                <div class="filter-field search-field">
+                    <label for="searchInput">Tìm kiếm</label>
                     <input type="text" id="searchInput" placeholder="Tìm Mã HĐ / SĐT / Tên..." onkeyup="renderDashboard()">
                 </div>
-                <button class="btn-danger" onclick="deleteCurrentDateData()">Xóa Dữ Liệu Ngày Chọn</button>
+                <button class="btn-danger" onclick="deleteCurrentDateData()">Xóa dữ liệu ngày chọn</button>
             </div>
         </div>
 
         <!-- DASHBOARD TỔNG QUAN -->
-        <table id="dashboardTable">
+        <section class="table-section">
+            <div class="table-heading"><div><div class="eyebrow">DANH SÁCH</div><h2>Hóa đơn</h2></div><span class="table-hint">Chuyển khoản trước · Mới nhất trước trong từng nhóm</span></div>
+            <div class="table-scroll"><table id="dashboardTable">
             <thead>
                 <tr>
-                    <th style="width: 20%;">1. Khách hàng</th>
-                    <th style="width: 15%;">2. SĐT</th>
-                    <th style="width: 15%; text-align: right;">3. Khách đã trả</th>
-                    <th style="width: 15%;">4. HĐĐT</th>
-                    <th style="width: 15%;">5. Thanh toán</th>
-                    <th style="width: 20%; text-align: center;">6. Xem chi tiết bill</th>
+                    <th style="width: 20%;">Khách hàng</th>
+                    <th style="width: 15%;">Số điện thoại</th>
+                    <th style="width: 15%; text-align: right;">Khách đã trả</th>
+                    <th style="width: 15%;">HĐ điện tử</th>
+                    <th style="width: 20%;">Thanh toán</th>
+                    <th style="width: 15%; text-align: center;">Chi tiết</th>
                 </tr>
             </thead>
             <tbody id="dashboardBody">
                 <tr><td colspan="6" style="text-align: center; color: var(--subtext);">Chưa có dữ liệu. Vui lòng import file Excel từ KiotViet.</td></tr>
             </tbody>
-        </table>
+            </table></div>
+        </section>
 
         <!-- BẢO MẬT & ĐỒNG BỘ GITHUB GIST -->
         <div class="footer-config">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <button type="button" class="btn-link" onclick="toggleConfig()" style="font-weight: 600; text-decoration: none;">
-                    ⚙️ Cấu hình Sync GitHub Gist (Đồng bộ đám mây) <span id="configArrow">▸</span>
-                </button>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn-success btn-sm" onclick="syncDataToCloud()">☁️ Tải lên Cloud (Push)</button>
-                    <button class="btn-secondary btn-sm" onclick="loadDataFromCloud()">📥 Tải xuống Cloud (Pull)</button>
+            <div class="cloud-top">
+                <div><div class="eyebrow">SAO LƯU & ĐỒNG BỘ</div><h2>GitHub Gist</h2><p>Chuyển dữ liệu giữa các thiết bị bằng Gist của bạn.</p></div>
+                <div class="cloud-actions">
+                    <button class="btn-success btn-sm" onclick="syncDataToCloud()">↑ Tải lên Cloud</button>
+                    <button class="btn-secondary btn-sm" onclick="loadDataFromCloud()">↓ Tải xuống Cloud</button>
+                    <button class="btn-secondary btn-sm" onclick="exportDataBackup()">Sao lưu JSON</button>
+                    <button class="btn-secondary btn-sm" onclick="document.getElementById('backupFile').click()">Khôi phục JSON</button>
+                    <input type="file" id="backupFile" accept=".json,application/json" hidden onchange="restoreDataBackup(event)">
                 </div>
             </div>
+            <button type="button" class="btn-link config-toggle" onclick="toggleConfig()" aria-controls="configSection">
+                Cấu hình kết nối Gist <span id="configArrow">▸</span>
+            </button>
 
-            <div id="configSection" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-                <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: flex-end;">
-                    <div class="form-group" style="margin:0;">
-                        <label style="font-size: 11px;">GitHub Personal Access Token</label>
+            <div id="configSection" style="display: none;">
+                <div class="config-grid">
+                    <div class="form-group">
+                        <label for="gistToken">GitHub Personal Access Token</label>
                         <input type="password" id="gistToken" placeholder="ghp_xxxxxxxxxxxx">
+                        <small class="config-help">Token chỉ được giữ trong phiên trình duyệt hiện tại.</small>
                     </div>
-                    <div class="form-group" style="margin:0;">
-                        <label style="font-size: 11px;">GitHub Gist ID</label>
-                        <input type="text" id="gistId" placeholder="Mã Gist lưu trữ">
+                    <div class="form-group">
+                        <label for="gistId">GitHub Gist ID hoặc URL</label>
+                        <input type="text" id="gistId" placeholder="Gist ID hoặc URL Gist">
                     </div>
-                    <button class="btn btn-sm" style="height: 31px;" onclick="saveGistConfig()">Lưu Cấu Hình</button>
+                    <button class="btn btn-sm" onclick="saveGistConfig()">Lưu cấu hình</button>
                 </div>
             </div>
         </div>
@@ -221,79 +263,71 @@
 </div>
 
 <!-- 3. MODAL CHI TIẾT BILL -->
-<div id="billModal" class="modal-backdrop">
+<div id="billModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="mMaHD">
     <div class="modal-content">
         <div class="modal-header">
             <div>
-                <h2 style="margin: 0; font-size: 18px; color: var(--primary);" id="mMaHD">HD000000</h2>
-                <span style="font-size: 12px; color: var(--subtext);" id="mNgayGio">--</span>
+                <div class="eyebrow">CHI TIẾT HÓA ĐƠN</div>
+                <h2 id="mMaHD">HD000000</h2>
+                <span id="mNgayGio">--</span>
             </div>
-            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <button type="button" class="modal-close" onclick="closeModal()" aria-label="Đóng chi tiết hóa đơn">&times;</button>
         </div>
 
         <div id="modalConflictAlert"></div>
 
-        <div class="bill-section">
-            <div class="bill-section-title">THÔNG TIN ĐỊNH DANH (TRA CỨU KIOTVIET)</div>
-            <div class="grid-3">
-                <div class="info-item"><label>Mã Hóa Đơn KiotViet:</label><value id="mMaHDKiotViet">--</value></div>
-                <div class="info-item"><label>Mã Khách Hàng:</label><value id="mMaKH">--</value></div>
-                <div class="info-item"><label>Tên Khách Hàng:</label><value id="mTenKH">--</value></div>
-                <div class="info-item"><label>Số Điện Thoại:</label><value id="mSDT">--</value></div>
-                <div class="info-item"><label>Thời Gian Lập:</label><value id="mThoiGian">--</value></div>
+        <div class="bill-section bill-overview">
+            <div class="bill-section-title">Thông tin đối chiếu</div>
+            <div class="bill-info-grid">
+                <div class="info-item"><label>Khách hàng</label><value id="mTenKH">--</value></div>
+                <div class="info-item"><label>Số điện thoại</label><value id="mSDT">--</value></div>
+                <div class="info-item"><label>Số HĐ điện tử</label><value id="mSoHDDT">--</value></div>
+                <div class="info-item"><label>Trạng thái HĐ điện tử</label><value id="mTrangThaiHDDT">--</value></div>
             </div>
         </div>
 
-        <div class="bill-section">
-            <div class="bill-section-title">HÓA ĐƠN ĐIỆN TỬ (HĐĐT)</div>
-            <div class="grid-2">
-                <div class="info-item"><label>Số HĐĐT (Giữ nguyên gốc):</label><value id="mSoHDDT">--</value></div>
-                <div class="info-item"><label>Trạng Thái HĐĐT:</label><value id="mTrangThaiHDDT">--</value></div>
+        <div class="bill-section bill-payment">
+            <div class="bill-section-title">Thanh toán</div>
+            <div class="bill-amounts">
+                <div class="amount-item"><span>Khách cần trả</span><strong id="mKhachCanTra">--</strong></div>
+                <div class="amount-item primary"><span>Khách đã trả</span><strong id="mKhachDaTra">--</strong></div>
+                <div class="amount-item"><span>Còn nợ</span><strong id="mConNo">--</strong></div>
             </div>
+            <div class="payment-method"><span>Phương thức</span><strong id="mHinhThucTT">--</strong><small id="mChiTietPhuongThucTT"></small></div>
         </div>
 
-        <div class="bill-section">
-            <div class="bill-section-title">GIÁ TRỊ & THANH TOÁN</div>
-            <div class="grid-3" style="margin-bottom: 8px;">
-                <div class="info-item"><label>Tổng Tiền Hàng:</label><value id="mTongTienHang">--</value></div>
-                <div class="info-item"><label>Giảm Giá Hóa Đơn:</label><value id="mGiamGia">--</value></div>
-                <div class="info-item"><label>Khách Cần Trả:</label><value id="mKhachCanTra">--</value></div>
-                <div class="info-item"><label>Khách Đã Trả (Nguồn):</label><value id="mKhachDaTra" style="color: var(--accent); font-size: 15px;">--</value></div>
-                <div class="info-item"><label>Còn Nợ:</label><value id="mConNo">--</value></div>
-                <div class="info-item"><label>Hình Thức Thanh Toán:</label><value id="mHinhThucTT">--</value></div>
+        <div class="bill-section bank-reconcile" id="bankReconcileSection" style="display: none;">
+            <div class="bill-section-title">Đối soát chuyển khoản</div>
+            <div class="bank-breakdown">
+                <div><span>Chuyển khoản trên bill</span><strong id="mTransferAmount">0 đ</strong></div>
+                <div><span>Tip chuyển khoản</span><strong id="mTipAmount">0 đ</strong></div>
+                <div class="bank-expected"><span>Ngân hàng dự kiến</span><strong id="mBankExpected">0 đ</strong></div>
             </div>
-            <div id="mChiTietPhuongThucTT" style="background: #f8fafc; padding: 8px; border-radius: 4px; font-size: 12px; border: 1px solid var(--border);"></div>
+            <div class="bank-inputs">
+                <div class="form-group"><label for="tipInput">Tip chuyển khoản (đ)</label><input type="text" inputmode="numeric" id="tipInput" placeholder="0" oninput="formatMoneyInput(this)"></div>
+                <div class="form-group"><label for="bankReceivedInput">Thực nhận trên sao kê (đ)</label><input type="text" inputmode="numeric" id="bankReceivedInput" placeholder="Để trống nếu chưa đối soát" oninput="formatMoneyInput(this)"></div>
+                <button type="button" class="btn btn-sm" onclick="saveBankReconciliation()">Lưu đối soát</button>
+            </div>
+            <div class="form-group bank-reference"><label for="bankReferenceInput">Mã giao dịch / nội dung chuyển khoản</label><input type="text" id="bankReferenceInput" maxlength="120" placeholder="Ghi để tra cứu trên sao kê"></div>
+            <div id="mBankDifference" class="bank-result"></div>
+            <p class="bank-save-note">Dấu chấm phân cách hàng nghìn được thêm tự động. Dùng “Tải lên Cloud” để đồng bộ sang máy khác.</p>
         </div>
 
-        <div class="bill-section">
-            <div class="bill-section-title">DANH SÁCH DỊCH VỤ / HÀNG HÓA</div>
+        <div class="bill-section bill-items">
+            <div class="bill-section-title">Hàng hóa / dịch vụ</div>
             <table class="table-mini">
                 <thead>
                     <tr>
-                        <th>Tên Dịch Vụ / Hàng Hóa</th>
-                        <th style="text-align: right;">SL</th>
-                        <th style="text-align: right;">Đơn Giá</th>
-                        <th style="text-align: right;">Giảm Giá</th>
-                        <th style="text-align: right;">Thành Tiền</th>
+                        <th>Tên hàng hóa / dịch vụ</th>
+                        <th style="text-align: right;">Số lượng</th>
+                        <th style="text-align: right;">Thành tiền</th>
                     </tr>
                 </thead>
                 <tbody id="mItemsBody"></tbody>
             </table>
         </div>
 
-        <div class="bill-section">
-            <div class="bill-section-title">NHÂN SỰ LIÊN QUAN</div>
-            <div class="grid-3">
-                <div class="info-item"><label>Thu Ngân:</label><value id="mThuNgan">--</value></div>
-                <div class="info-item"><label>Nhân Viên Tư Vấn:</label><value id="mNVTuVan">--</value></div>
-                <div class="info-item"><label>Nhân Viên Làm Dịch Vụ:</label><value id="mNVThucHien">--</value></div>
-            </div>
-        </div>
-
-        <div style="text-align: right; margin-top: 15px; border-top: 1px solid var(--border); padding-top: 12px;">
-            <span style="font-size: 11px; color: var(--subtext); margin-right: 10px;">Dùng Mã HĐ để tìm chính xác trên KiotViet: <b id="mSearchGuide">--</b></span>
-            <button class="btn" style="width: auto; padding: 6px 16px;" onclick="closeModal()">Đóng</button>
-        </div>
+        <div class="modal-footer"><button class="btn" onclick="closeModal()">Đóng</button></div>
     </div>
 </div>
 
@@ -301,30 +335,41 @@
     // --- STATE MANAGEMENT ---
     let currentUser = null;
     let gistConfig = { token: '', id: '' };
-    const SYSTEM_PASSWORD = "123456";
+    let activePassphrase = null;
     
     let rawStore = []; 
     let billStore = {}; 
+    let importedFiles = [];
+    let syncState = { gistId: '', cloudUpdatedAt: '', dirty: false };
+    let activeBillId = null;
 
     // --- INITIALIZATION ---
     window.onload = function() {
         const savedUser = localStorage.getItem('kv_user');
         const savedGist = localStorage.getItem('kv_gist');
         
-        loadFromLocalStorage();
+        try {
+            syncState = JSON.parse(localStorage.getItem('kv_sync_state')) || syncState;
+        } catch (error) {
+            console.error('Lỗi đọc trạng thái đồng bộ:', error);
+        }
 
         if (savedGist) {
-            gistConfig = JSON.parse(savedGist);
-            document.getElementById('gistToken').value = gistConfig.token || '';
-            document.getElementById('gistId').value = gistConfig.id || '';
+            try {
+                gistConfig = JSON.parse(savedGist);
+                const legacyToken = gistConfig.token || '';
+                document.getElementById('gistToken').value = sessionStorage.getItem('kv_gist_token') || legacyToken;
+                document.getElementById('gistId').value = gistConfig.id || '';
+                if (legacyToken) {
+                    sessionStorage.setItem('kv_gist_token', legacyToken);
+                    localStorage.setItem('kv_gist', JSON.stringify({ id: gistConfig.id || '' }));
+                }
+            } catch (error) {
+                console.error('Lỗi đọc cấu hình Gist:', error);
+            }
         }
 
-        if (savedUser) {
-            currentUser = savedUser;
-            showAppScreen();
-            updateDateDropdown();
-            renderDashboard();
-        }
+        if (savedUser) document.getElementById('username').value = savedUser;
     };
 
     function toggleConfig() {
@@ -340,30 +385,80 @@
     }
 
     function saveGistConfig() {
-        const token = document.getElementById('gistToken').value.trim();
-        const id = document.getElementById('gistId').value.trim();
-        
-        gistConfig = { token, id };
+        const { token, id } = readGistConfig();
+        if (!id) return alert('Gist ID không hợp lệ. Hãy nhập ID hoặc URL dạng https://gist.github.com/ten-tai-khoan/ID');
+        gistConfig = { id };
         localStorage.setItem('kv_gist', JSON.stringify(gistConfig));
+        if (token) sessionStorage.setItem('kv_gist_token', token);
+        else sessionStorage.removeItem('kv_gist_token');
+        document.getElementById('gistId').value = id;
         alert('Đã lưu cấu hình GitHub Gist thành công!');
     }
 
-    function login() {
+    function readGistConfig() {
+        const token = document.getElementById('gistToken').value.trim();
+        const input = document.getElementById('gistId').value.trim();
+        const match = input.match(/(?:^|\/)([a-f\d]{20,64})(?:\/?(?:[?#].*)?)?$/i);
+        return { token, id: match ? match[1] : '' };
+    }
+
+    function gistErrorMessage(status, message) {
+        if (status === 401) return 'Token không hợp lệ hoặc đã hết hạn (HTTP 401).';
+        if (status === 403) return `Không có quyền truy cập Gist hoặc đã vượt giới hạn API (HTTP 403). ${message}`;
+        if (status === 404) return 'Không tìm thấy Gist (HTTP 404). Kiểm tra Gist ID, quyền truy cập và token.';
+        if (status === 422) return `GitHub từ chối dữ liệu gửi lên (HTTP 422). ${message}`;
+        return `GitHub trả về HTTP ${status}${message ? ': ' + message : ''}`;
+    }
+
+    async function readGistResponse(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(gistErrorMessage(res.status, data.message || ''));
+        return data;
+    }
+
+    async function login() {
         const user = document.getElementById('username').value.trim();
-        const pass = document.getElementById('password').value.trim();
+        const pass = document.getElementById('password').value;
 
         if (!user) {
             alert('Vui lòng nhập Mã Nhân Viên / Kế Toán');
             return;
         }
 
-        if (pass !== SYSTEM_PASSWORD) {
-            alert('Mật khẩu không chính xác! (Mặc định: 123456)');
+        if (pass.length < 10) {
+            alert('Mật khẩu dữ liệu cần ít nhất 10 ký tự. Mật khẩu mặc định 123456 cũ không còn được sử dụng.');
             return;
         }
 
+        try {
+            const storedEncrypted = localStorage.getItem('kv_encrypted_store');
+            if (storedEncrypted) {
+                const { content } = await decodeSnapshot(JSON.parse(storedEncrypted), pass);
+                if (!validateDataSnapshot(content)) throw new Error('Dữ liệu trên thiết bị không đúng định dạng.');
+                billStore = content.billStore;
+                rawStore = content.rawStore;
+                importedFiles = content.importedFiles || [];
+            } else {
+                loadFromLocalStorage();
+                const hasLegacyData = localStorage.getItem('kv_bill_store') !== null ||
+                    localStorage.getItem('kv_raw_store') !== null || localStorage.getItem('kv_imported_files') !== null;
+                if (hasLegacyData) {
+                    downloadJsonBackup(await encryptSnapshot(currentDataSnapshot(), pass), 'kiotviet-truoc-chuyen-doi');
+                    if (!await saveToLocalStorage(billStore, rawStore, importedFiles, pass)) {
+                        document.getElementById('legacyBackupButton').style.display = 'block';
+                        throw new Error('Không đủ dung lượng để mã hóa dữ liệu cũ. Dữ liệu cũ vẫn còn; hãy bấm “Tải bản sao lưu dữ liệu cũ”.');
+                    }
+                }
+            }
+        } catch (error) {
+            alert(`Không mở được dữ liệu: ${error.message}`);
+            return;
+        }
+
+        activePassphrase = pass;
         currentUser = user;
         localStorage.setItem('kv_user', user);
+        document.getElementById('password').value = '';
 
         showAppScreen();
         updateDateDropdown();
@@ -372,6 +467,8 @@
 
     function logout() {
         localStorage.removeItem('kv_user');
+        sessionStorage.removeItem('kv_gist_token');
+        activePassphrase = null;
         location.reload();
     }
 
@@ -379,14 +476,23 @@
         document.getElementById('authScreen').style.display = 'none';
         document.getElementById('appScreen').style.display = 'block';
         document.getElementById('displayUser').innerText = currentUser;
+        const status = document.getElementById('syncStatus');
+        status.innerText = syncState.dirty ? 'Có thay đổi chưa đồng bộ' : 'Lưu mã hóa trên thiết bị';
+        status.className = syncState.dirty ? 'sync-chip dirty' : 'sync-chip';
     }
 
-    function saveToLocalStorage() {
+    async function saveToLocalStorage(bills = billStore, rows = rawStore, files = importedFiles, passphrase = activePassphrase) {
         try {
-            localStorage.setItem('kv_bill_store', JSON.stringify(billStore));
-            localStorage.setItem('kv_raw_store', JSON.stringify(rawStore));
+            if (!passphrase) throw new Error('Chưa mở dữ liệu bằng mật khẩu.');
+            const encrypted = await encryptSnapshot({ billStore: bills, rawStore: rows, importedFiles: files }, passphrase);
+            localStorage.setItem('kv_encrypted_store', JSON.stringify(encrypted));
+            localStorage.removeItem('kv_bill_store');
+            localStorage.removeItem('kv_raw_store');
+            localStorage.removeItem('kv_imported_files');
+            return true;
         } catch (e) {
             console.error("Lỗi lưu LocalStorage:", e);
+            return false;
         }
     }
 
@@ -394,11 +500,187 @@
         try {
             const savedBills = localStorage.getItem('kv_bill_store');
             const savedRaw = localStorage.getItem('kv_raw_store');
+            const savedFiles = localStorage.getItem('kv_imported_files');
             if (savedBills) billStore = JSON.parse(savedBills);
             if (savedRaw) rawStore = JSON.parse(savedRaw);
+            if (savedFiles) importedFiles = JSON.parse(savedFiles);
         } catch (e) {
             console.error("Lỗi đọc LocalStorage:", e);
         }
+    }
+
+    async function exportLegacyBackup() {
+        try {
+            const passphrase = document.getElementById('password').value;
+            loadFromLocalStorage();
+            const backup = await encryptSnapshot(currentDataSnapshot(), passphrase);
+            downloadJsonBackup(backup, 'kiotviet-du-lieu-cu');
+            alert('Đã tạo bản sao lưu mã hóa của dữ liệu cũ. Hãy giữ tệp và mật khẩu ở nơi an toàn.');
+        } catch (error) {
+            alert(`Không tạo được bản sao lưu: ${error.message}`);
+        }
+    }
+
+    function saveSyncState() {
+        try {
+            localStorage.setItem('kv_sync_state', JSON.stringify(syncState));
+        } catch (error) {
+            console.error('Lỗi lưu trạng thái đồng bộ:', error);
+        }
+    }
+
+    function markLocalDirty() {
+        syncState.dirty = true;
+        saveSyncState();
+        const status = document.getElementById('syncStatus');
+        if (status) {
+            status.innerText = 'Có thay đổi chưa đồng bộ';
+            status.className = 'sync-chip dirty';
+        }
+    }
+
+    function currentDataSnapshot() {
+        return { schemaVersion: 2, billStore, rawStore, importedFiles, updatedAt: new Date().toISOString() };
+    }
+
+    function validateDataSnapshot(content) {
+        return content && content.billStore && typeof content.billStore === 'object' && !Array.isArray(content.billStore) &&
+            Array.isArray(content.rawStore) &&
+            (content.importedFiles === undefined || Array.isArray(content.importedFiles)) &&
+            Object.values(content.billStore).every(b => b && typeof b.maHD === 'string' &&
+                typeof b.ngay === 'string' && typeof b.tenKH === 'string' &&
+                typeof b.sdt === 'string' && typeof b.soHDDT === 'string' && Array.isArray(b.items));
+    }
+
+    function bytesToBase64(bytes) {
+        let binary = '';
+        for (let index = 0; index < bytes.length; index += 8192) {
+            binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
+        }
+        return btoa(binary);
+    }
+
+    function base64ToBytes(value) {
+        return Uint8Array.from(atob(value), char => char.charCodeAt(0));
+    }
+
+    async function deriveEncryptionKey(passphrase, salt) {
+        if (!globalThis.crypto?.subtle) throw new Error('Trình duyệt này không hỗ trợ mã hóa dữ liệu. Hãy mở bằng phiên bản Chrome hoặc Edge mới.');
+        const source = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+        return crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt, iterations: 250000, hash: 'SHA-256' },
+            source, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+        );
+    }
+
+    async function encryptSnapshot(snapshot, passphrase) {
+        if (typeof passphrase !== 'string' || passphrase.length < 10) throw new Error('Mật khẩu mã hóa cần ít nhất 10 ký tự. Hãy ghi nhớ mật khẩu này để mở dữ liệu trên máy khác.');
+        if (!globalThis.crypto?.subtle) throw new Error('Trình duyệt này không hỗ trợ mã hóa dữ liệu. Hãy mở bằng phiên bản Chrome hoặc Edge mới.');
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const key = await deriveEncryptionKey(passphrase, salt);
+        let plaintext = new TextEncoder().encode(JSON.stringify(snapshot));
+        let compressed = false;
+        if (globalThis.CompressionStream) {
+            const stream = new Blob([plaintext]).stream().pipeThrough(new CompressionStream('gzip'));
+            plaintext = new Uint8Array(await new Response(stream).arrayBuffer());
+            compressed = true;
+        }
+        const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext));
+        return { format: 'kiotviet-encrypted-v1', compressed, salt: bytesToBase64(salt), iv: bytesToBase64(iv), ciphertext: bytesToBase64(ciphertext) };
+    }
+
+    async function decodeSnapshot(data, passphrase) {
+        if (data?.format !== 'kiotviet-encrypted-v1') return { content: data, encrypted: false };
+        if (!passphrase) throw new Error('Dữ liệu đã mã hóa. Hãy mở ứng dụng bằng đúng mật khẩu dữ liệu.');
+        try {
+            const salt = base64ToBytes(data.salt);
+            const iv = base64ToBytes(data.iv);
+            const ciphertext = base64ToBytes(data.ciphertext);
+            const key = await deriveEncryptionKey(passphrase, salt);
+            let plaintext = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext));
+            if (data.compressed) {
+                if (!globalThis.DecompressionStream) throw new Error('Trình duyệt không hỗ trợ giải nén dữ liệu.');
+                const stream = new Blob([plaintext]).stream().pipeThrough(new DecompressionStream('gzip'));
+                plaintext = new Uint8Array(await new Response(stream).arrayBuffer());
+            }
+            return { content: JSON.parse(new TextDecoder().decode(plaintext)), encrypted: true };
+        } catch (error) {
+            if (error.message && error.message.startsWith('Trình duyệt')) throw error;
+            throw new Error('Không giải mã được dữ liệu. Mật khẩu không đúng hoặc file đã bị hỏng.');
+        }
+    }
+
+    function downloadJsonBackup(content, prefix = 'kiotviet-sao-luu') {
+        const blob = new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${prefix}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function exportDataBackup() {
+        try {
+            const backup = await encryptSnapshot(currentDataSnapshot(), activePassphrase);
+            downloadJsonBackup(backup);
+            return true;
+        } catch (error) {
+            alert(`Không thể tạo bản sao lưu: ${error.message}`);
+            return false;
+        }
+    }
+
+    async function restoreDataBackup(event) {
+        const input = event.target;
+        const file = input.files[0];
+        if (!file) return;
+        try {
+            const { content } = await decodeSnapshot(JSON.parse(await file.text()), activePassphrase);
+            if (!validateDataSnapshot(content)) throw new Error('File không đúng định dạng bản sao lưu hóa đơn.');
+            if (!confirm(`Khôi phục ${Object.keys(content.billStore).length} hóa đơn từ ${file.name}? Dữ liệu hiện tại sẽ được sao lưu rồi thay thế.`)) return;
+            if (Object.keys(billStore).length && !await exportDataBackup()) return;
+            const files = content.importedFiles || [];
+            if (!await saveToLocalStorage(content.billStore, content.rawStore, files)) throw new Error('Không đủ dung lượng lưu trên trình duyệt. Dữ liệu hiện tại chưa thay đổi.');
+            billStore = content.billStore;
+            rawStore = content.rawStore;
+            importedFiles = files;
+            markLocalDirty();
+            updateDateDropdown();
+            renderDashboard();
+            alert('Đã khôi phục dữ liệu. Hãy kiểm tra lại trước khi tải lên Cloud.');
+        } catch (error) {
+            alert(`Khôi phục thất bại: ${error.message}`);
+        } finally {
+            input.value = '';
+        }
+    }
+
+    async function fingerprintFile(buffer) {
+        if (globalThis.crypto && crypto.subtle) {
+            const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer));
+            return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+        const bytes = new Uint8Array(buffer);
+        let first = 2166136261;
+        let second = 2246822519;
+        for (const byte of bytes) {
+            first = Math.imul(first ^ byte, 16777619);
+            second = Math.imul(second ^ byte, 3266489917);
+        }
+        return `${bytes.length}-${first >>> 0}-${second >>> 0}`;
+    }
+
+    function matchesImportedRows(rows, fileName) {
+        const previous = rawStore.filter(row => row._sourceFile === fileName);
+        if (previous.length !== rows.length) return false;
+        return previous.every((row, index) => {
+            const { _sourceFile, _importedAt, ...original } = row;
+            return JSON.stringify(original) === JSON.stringify(rows[index]);
+        });
     }
 
     function parseKiotVietDate(val) {
@@ -434,21 +716,57 @@
     document.getElementById('excelFiles').addEventListener('change', handleImportFiles);
 
     async function handleImportFiles(e) {
-        const files = e.target.files;
+        const files = Array.from(e.target.files);
         if (!files.length) return;
 
-        for (let file of files) {
-            const buffer = await file.arrayBuffer();
-            const workbook = XLSX.read(buffer, { cellDates: true, raw: false });
-            const sheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-
-            processRawRows(jsonRows, file.name);
+        if (typeof XLSX === 'undefined') {
+            alert('Không tải được thư viện đọc Excel. Vui lòng kiểm tra kết nối mạng rồi tải lại trang.');
+            e.target.value = '';
+            return;
         }
 
-        saveToLocalStorage();
-        updateDateDropdown();
-        renderDashboard();
+        const errors = [];
+        let imported = 0;
+        let skipped = 0;
+        for (const file of files) {
+            try {
+                const buffer = await file.arrayBuffer();
+                const fingerprint = await fingerprintFile(buffer);
+                if (importedFiles.includes(fingerprint)) {
+                    skipped++;
+                    continue;
+                }
+                const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                if (!sheet) throw new Error('File không có sheet dữ liệu');
+                const jsonRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                if (!jsonRows.some(row => Object.hasOwn(row, 'Mã hóa đơn'))) {
+                    throw new Error('Không tìm thấy cột "Mã hóa đơn" trong sheet đầu tiên');
+                }
+                if (matchesImportedRows(jsonRows, file.name)) {
+                    importedFiles.push(fingerprint);
+                    skipped++;
+                    continue;
+                }
+                processRawRows(jsonRows, file.name);
+                importedFiles.push(fingerprint);
+                imported++;
+            } catch (error) {
+                errors.push(`${file.name}: ${error.message}`);
+            }
+        }
+
+        if (imported || skipped) {
+            if (!await saveToLocalStorage()) {
+                errors.push('Bộ nhớ trình duyệt đã đầy hoặc bị chặn. Dữ liệu mới chỉ tồn tại trong phiên đang mở.');
+            }
+            if (imported) markLocalDirty();
+            updateDateDropdown();
+            renderDashboard();
+        }
+        e.target.value = '';
+        if (errors.length) alert(`Không nhập được ${errors.length} file:\n${errors.join('\n')}`);
+        else if (skipped) alert(`Đã bỏ qua ${skipped} file Excel đã nhập trước đó.`);
     }
 
     function processRawRows(rows, fileName) {
@@ -562,11 +880,85 @@
         }
     }
 
+    function getBillTimestamp(bill) {
+        const text = String(bill.thoiGian || '').trim();
+        const vietnameseDate = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+        if (vietnameseDate) {
+            const [, day, month, year, hour = '0', minute = '0', second = '0'] = vietnameseDate;
+            const fullYear = year.length === 2 ? Number('20' + year) : Number(year);
+            return new Date(fullYear, Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)).getTime();
+        }
+
+        const normalized = text.replace(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/, '$1T$2');
+        const parsed = Date.parse(normalized);
+        if (Number.isFinite(parsed)) return parsed;
+        const dateOnly = Date.parse(String(bill.ngay || ''));
+        return Number.isFinite(dateOnly) ? dateOnly : -Infinity;
+    }
+
+    function sortBillsForDashboard(bills) {
+        const paymentRank = bill => bill.paymentSummary === 'Chuyển khoản' ? 0 : bill.paymentSummary === 'Tiền mặt' ? 2 : 1;
+        return bills.sort((a, b) =>
+            paymentRank(a) - paymentRank(b) ||
+            getBillTimestamp(b) - getBillTimestamp(a) ||
+            a.maHD.localeCompare(b.maHD, 'vi', { numeric: true })
+        );
+    }
+
+    function formatBillTime(bill) {
+        if (!/\d{1,2}:\d{2}/.test(String(bill.thoiGian || ''))) return '-';
+        const timestamp = getBillTimestamp(bill);
+        if (!Number.isFinite(timestamp)) return String(bill.thoiGian).match(/\d{1,2}:\d{2}/)[0];
+        const date = new Date(timestamp);
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+
+    function getTransferAmount(bill) {
+        if (Number(bill.valChuyenKhoan) > 0) return Number(bill.valChuyenKhoan);
+        return bill.paymentSummary === 'Chuyển khoản' ? Number(bill.khachDaTra) || 0 : 0;
+    }
+
+    function getBankReconciliation(bill) {
+        const transfer = getTransferAmount(bill);
+        const rawTip = Number(bill.tipChuyenKhoan);
+        const tip = Number.isSafeInteger(rawTip) && rawTip >= 0 ? rawTip : 0;
+        const expected = transfer + tip;
+        const rawReceived = bill.bankReceived == null || bill.bankReceived === '' ? null : Number(bill.bankReceived);
+        const received = Number.isSafeInteger(rawReceived) && rawReceived >= 0 ? rawReceived : null;
+        return { transfer, tip, expected, received, difference: received === null ? null : received - expected };
+    }
+
+    function parseVndInput(value, optional = false) {
+        const text = String(value).trim().replace(/\s/g, '');
+        if (!text && optional) return null;
+        if (!/^\d+$/.test(text) && !/^\d{1,3}([.,]\d{3})+$/.test(text)) return NaN;
+        const amount = Number(text.replace(/[.,]/g, ''));
+        return Number.isSafeInteger(amount) ? amount : NaN;
+    }
+
+    function formatVndInputValue(value) {
+        const digits = String(value).replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+        return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+
+    function formatMoneyInput(input) {
+        const cursor = input.selectionStart == null ? input.value.length : input.selectionStart;
+        const digitsBeforeCursor = input.value.slice(0, cursor).replace(/\D/g, '').length;
+        input.value = formatVndInputValue(input.value);
+        let nextCursor = 0;
+        let digitsSeen = 0;
+        while (nextCursor < input.value.length && digitsSeen < digitsBeforeCursor) {
+            if (/\d/.test(input.value[nextCursor])) digitsSeen++;
+            nextCursor++;
+        }
+        if (typeof input.setSelectionRange === 'function') input.setSelectionRange(nextCursor, nextCursor);
+    }
+
     function renderDashboard() {
         const currentDate = document.getElementById('dateFilter').value;
         const searchInput = document.getElementById('searchInput').value.trim().toLowerCase();
 
-        const bills = Object.values(billStore).filter(b => {
+        const bills = sortBillsForDashboard(Object.values(billStore).filter(b => {
             const matchDate = (currentDate === 'ALL' || b.ngay === currentDate);
             const matchSearch = (!searchInput || 
                 b.maHD.toLowerCase().includes(searchInput) || 
@@ -574,11 +966,12 @@
                 b.sdt.includes(searchInput) ||
                 b.soHDDT.toLowerCase().includes(searchInput));
             return matchDate && matchSearch;
-        });
+        }));
 
         let totalDoanhThu = 0;
         let totalTienMat = 0;
         let totalChuyenKhoan = 0;
+        let totalTip = 0;
 
         bills.forEach(b => {
             const daTra = b.khachDaTra || 0;
@@ -590,17 +983,17 @@
                 totalTienMat += daTra;
             }
 
-            if (b.valChuyenKhoan > 0) {
-                totalChuyenKhoan += b.valChuyenKhoan;
-            } else if (b.paymentSummary === 'Chuyển khoản') {
-                totalChuyenKhoan += daTra;
-            }
+            const transfer = getTransferAmount(b);
+            totalChuyenKhoan += transfer;
+            if (transfer > 0) totalTip += getBankReconciliation(b).tip;
         });
 
         document.getElementById('sumCount').innerText = bills.length;
         document.getElementById('sumDoanhThu').innerText = formatVND(totalDoanhThu);
         document.getElementById('sumTienMat').innerText = formatVND(totalTienMat);
         document.getElementById('sumChuyenKhoan').innerText = formatVND(totalChuyenKhoan);
+        document.getElementById('sumTip').innerText = formatVND(totalTip);
+        document.getElementById('sumBankExpected').innerText = formatVND(totalChuyenKhoan + totalTip);
 
         const tbody = document.getElementById('dashboardBody');
         tbody.innerHTML = '';
@@ -613,14 +1006,20 @@
         bills.forEach(b => {
             const tr = document.createElement('tr');
 
-            const td1 = `<td><b>${escapeHtml(b.tenKH || 'Khách lẻ')}</b>${b.hasConflict ? '<br><span class="badge-conflict">⚠️ CONFLICT</span>' : ''}</td>`;
+            const td1 = `<td><b>${escapeHtml(b.tenKH || 'Khách lẻ')}</b><span class="bill-time">${escapeHtml(formatBillTime(b))}</span>${b.hasConflict ? '<span class="badge-conflict">⚠️ CONFLICT</span>' : ''}</td>`;
             const td2 = `<td>${escapeHtml(b.sdt || '-')}</td>`;
             const td3 = `<td class="num">${formatVND(b.khachDaTra)}</td>`;
             const td4 = `<td>${escapeHtml(b.soHDDT || '-')}</td>`;
-            const td5 = `<td>${escapeHtml(b.paymentSummary)}</td>`;
-            const td6 = `<td style="text-align: center;"><button class="btn-detail" onclick="openBillModal('${b.maHD}')">Xem chi tiết bill</button></td>`;
+            const bank = getBankReconciliation(b);
+            const tipBadge = bank.tip > 0 ? `<span class="tip-badge">TIP +${formatVND(bank.tip)}</span>` : '';
+            const bankNote = bank.transfer > 0
+                ? `<span class="bill-bank-note${bank.tip > 0 ? ' has-tip' : ''}">NH dự kiến <b>${formatVND(bank.expected)}</b> · ${bank.difference === null ? 'Chưa đối soát' : bank.difference === 0 ? 'Đã khớp' : 'Có chênh lệch'}</span>`
+                : '';
+            const td5 = `<td><div class="payment-cell-title">${escapeHtml(b.paymentSummary)}${tipBadge}</div>${bankNote}</td>`;
+            const td6 = '<td style="text-align: center;"><button class="btn-detail" type="button">Xem chi tiết bill</button></td>';
 
             tr.innerHTML = td1 + td2 + td3 + td4 + td5 + td6;
+            tr.querySelector('.btn-detail').addEventListener('click', () => openBillModal(b.maHD));
             tbody.appendChild(tr);
         });
     }
@@ -628,51 +1027,57 @@
     function openBillModal(maHD) {
         const b = billStore[maHD];
         if (!b) return;
+        activeBillId = maHD;
 
         document.getElementById('mMaHD').innerText = b.maHD;
         document.getElementById('mNgayGio').innerText = b.thoiGian || b.ngay;
-        document.getElementById('mMaHDKiotViet').innerText = b.maHD;
-        document.getElementById('mMaKH').innerText = b.maKH || '-';
         document.getElementById('mTenKH').innerText = b.tenKH || 'Khách lẻ';
         document.getElementById('mSDT').innerText = b.sdt || '-';
-        document.getElementById('mThoiGian').innerText = b.thoiGian || '-';
 
         document.getElementById('mSoHDDT').innerText = b.soHDDT || 'Chưa phát hành';
         document.getElementById('mTrangThaiHDDT').innerText = b.trangThaiHDDT || '-';
 
-        document.getElementById('mTongTienHang').innerText = formatVND(b.tongTienHang);
-        document.getElementById('mGiamGia').innerText = formatVND(b.giamGiaHD);
         document.getElementById('mKhachCanTra').innerText = formatVND(b.khachCanTra);
         document.getElementById('mKhachDaTra').innerText = formatVND(b.khachDaTra);
         document.getElementById('mConNo').innerText = formatVND(b.conNo);
-        document.getElementById('mHinhThucTT').innerText = b.paymentSummary;
-        document.getElementById('mChiTietPhuongThucTT').innerText = `Chi tiết nguồn: ${b.paymentDetails}`;
+        document.getElementById('mHinhThucTT').innerText = b.paymentSummary || '-';
+        document.getElementById('mChiTietPhuongThucTT').innerText = b.paymentDetails || 'Chưa ghi nhận';
 
-        document.getElementById('mThuNgan').innerText = b.thuNgan || '-';
-        document.getElementById('mNVTuVan').innerText = b.nvTuVan || '-';
-
-        const nvDichVuSet = [...new Set(b.items.map(i => i.nvDichVu).filter(x => x))];
-        document.getElementById('mNVThucHien').innerText = nvDichVuSet.join(', ') || '-';
-
-        document.getElementById('mSearchGuide').innerText = b.maHD;
+        const bank = getBankReconciliation(b);
+        const bankSection = document.getElementById('bankReconcileSection');
+        bankSection.style.display = bank.transfer > 0 ? 'block' : 'none';
+        if (bank.transfer > 0) {
+            document.getElementById('mTransferAmount').innerText = formatVND(bank.transfer);
+            document.getElementById('mTipAmount').innerText = formatVND(bank.tip);
+            document.getElementById('mBankExpected').innerText = formatVND(bank.expected);
+            document.getElementById('tipInput').value = bank.tip ? formatVndInputValue(bank.tip) : '';
+            document.getElementById('bankReceivedInput').value = bank.received === null ? '' : formatVndInputValue(bank.received);
+            document.getElementById('bankReferenceInput').value = b.bankReference || '';
+            const result = document.getElementById('mBankDifference');
+            result.className = 'bank-result ' + (bank.difference === null ? 'pending' : bank.difference === 0 ? 'matched' : 'mismatch');
+            result.innerText = bank.difference === null ? 'Chưa nhập số tiền trên sao kê' :
+                bank.difference === 0 ? 'Đã khớp với ngân hàng' :
+                `Chênh lệch ${bank.difference > 0 ? '+' : '−'}${formatVND(Math.abs(bank.difference))}`;
+        }
 
         const conflictDiv = document.getElementById('modalConflictAlert');
         if (b.hasConflict) {
-            conflictDiv.innerHTML = `<div class="badge-conflict" style="width:100%; margin-bottom:12px; padding:8px;">⚠️ ${b.conflictNote}</div>`;
+            conflictDiv.innerHTML = `<div class="badge-conflict" style="width:100%; margin-bottom:12px; padding:8px;">⚠️ ${escapeHtml(b.conflictNote)}</div>`;
         } else {
             conflictDiv.innerHTML = '';
         }
 
         const itemsBody = document.getElementById('mItemsBody');
         itemsBody.innerHTML = '';
+        if (!b.items.length) {
+            itemsBody.innerHTML = '<tr><td colspan="3" class="empty-items">Không có hàng hóa / dịch vụ trong dữ liệu đã nhập.</td></tr>';
+        }
         b.items.forEach(it => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${escapeHtml(it.tenHang)}</td>
-                <td style="text-align: right;">${it.soLuong}</td>
-                <td style="text-align: right;">${formatVND(it.donGia)}</td>
-                <td style="text-align: right;">${formatVND(it.giamGia)}</td>
-                <td style="text-align: right;"><b>${formatVND(it.thanhTien)}</b></td>
+                <td style="text-align: right;">${escapeHtml(it.soLuong)}</td>
+                <td style="text-align: right;"><b>${escapeHtml(formatVND(it.thanhTien))}</b></td>
             `;
             itemsBody.appendChild(tr);
         });
@@ -682,15 +1087,48 @@
 
     function closeModal() {
         document.getElementById('billModal').style.display = 'none';
+        activeBillId = null;
     }
 
-    function deleteCurrentDateData() {
+    async function saveBankReconciliation() {
+        const bill = activeBillId && billStore[activeBillId];
+        if (!bill || getTransferAmount(bill) <= 0) return;
+
+        const tip = parseVndInput(document.getElementById('tipInput').value || '0');
+        const received = parseVndInput(document.getElementById('bankReceivedInput').value, true);
+        const reference = document.getElementById('bankReferenceInput').value.trim();
+        if (!Number.isSafeInteger(tip) || (received !== null && !Number.isSafeInteger(received))) {
+            alert('Vui lòng nhập số tiền không âm, không có phần thập phân. Có thể dùng dấu chấm hoặc dấu phẩy để tách hàng nghìn.');
+            return;
+        }
+
+        const previousTip = bill.tipChuyenKhoan;
+        const previousReceived = bill.bankReceived;
+        const previousReference = bill.bankReference;
+        bill.tipChuyenKhoan = tip;
+        bill.bankReceived = received;
+        bill.bankReference = reference;
+        if (!await saveToLocalStorage()) {
+            bill.tipChuyenKhoan = previousTip;
+            bill.bankReceived = previousReceived;
+            bill.bankReference = previousReference;
+            alert('Không lưu được đối soát vào trình duyệt. Vui lòng kiểm tra dung lượng lưu trữ.');
+            return;
+        }
+        markLocalDirty();
+        renderDashboard();
+        openBillModal(activeBillId);
+    }
+
+    async function deleteCurrentDateData() {
         const selectedDate = document.getElementById('dateFilter').value;
         if (selectedDate === 'ALL') {
             return alert('Vui lòng chọn một ngày cụ thể trong danh sách "Ngày HĐ" để xóa.');
         }
 
         if (confirm(`Bạn có chắc chắn muốn xóa toàn bộ dữ liệu ngày ${selectedDate}?`)) {
+            const previousBills = { ...billStore };
+            const previousRaw = rawStore;
             Object.keys(billStore).forEach(maHD => {
                 if (billStore[maHD].ngay === selectedDate) {
                     delete billStore[maHD];
@@ -699,47 +1137,89 @@
 
             rawStore = rawStore.filter(r => parseKiotVietDate(r['Thời gian'] || r['Ngày tạo']) !== selectedDate);
 
-            saveToLocalStorage();
+            if (!await saveToLocalStorage()) {
+                billStore = previousBills;
+                rawStore = previousRaw;
+                alert('Không lưu được thao tác xóa. Dữ liệu chưa bị thay đổi.');
+            } else markLocalDirty();
             updateDateDropdown();
             renderDashboard();
         }
     }
 
+    async function readGistContent(data) {
+        const gistFile = data.files && data.files['kiotviet_data.json'];
+        if (!gistFile) throw new Error('Gist chưa có file kiotviet_data.json. Hãy tải dữ liệu lên từ máy chính trước.');
+        if (!gistFile.truncated) return gistFile.content;
+        if (!gistFile.raw_url) throw new Error('File trên Gist quá lớn và thiếu đường dẫn tải đầy đủ.');
+        const response = await fetch(gistFile.raw_url, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Không tải được file dữ liệu đầy đủ (HTTP ${response.status}).`);
+        return response.text();
+    }
+
+    function setSyncClean(id, updatedAt) {
+        syncState = { gistId: id, cloudUpdatedAt: updatedAt || '', dirty: false };
+        saveSyncState();
+        document.getElementById('syncStatus').className = 'sync-chip';
+    }
+
     // --- ĐỒNG BỘ CLOUD (ĐÃ TỐI ƯU HÀM PULL & PUSH) ---
     async function syncDataToCloud() {
-        if (!gistConfig.token || !gistConfig.id) {
-            alert('Vui lòng nhập Token và Gist ID ở góc dưới trước!');
+        const { token, id } = readGistConfig();
+        const passphrase = activePassphrase;
+        if (!token || !id) {
+            alert('Vui lòng nhập token và Gist ID hợp lệ trong phần cấu hình.');
+            return;
+        }
+        if (!passphrase || passphrase.length < 10) {
+            alert('Vui lòng mở dữ liệu bằng mật khẩu ít nhất 10 ký tự trước khi tải lên Cloud.');
             return;
         }
 
         document.getElementById('syncStatus').innerText = 'Đang tải lên...';
         try {
+            const headers = {
+                'Accept': 'application/vnd.github+json',
+                'Authorization': `Bearer ${token}`
+            };
+            const existingResponse = await fetch(`https://api.github.com/gists/${id}`, {
+                method: 'GET', headers, cache: 'no-store'
+            });
+            const existingGist = await readGistResponse(existingResponse);
+            const gistFile = existingGist.files && existingGist.files['kiotviet_data.json'];
+            const cloudChanged = gistFile && (syncState.gistId !== id || !syncState.cloudUpdatedAt ||
+                existingGist.updated_at !== syncState.cloudUpdatedAt);
+            if (cloudChanged) {
+                if (!confirm('Dữ liệu trên Gist đã thay đổi hoặc máy này chưa từng đồng bộ. Tải lên sẽ thay thế dữ liệu Cloud. Tiếp tục sau khi tải bản sao lưu Cloud?')) {
+                    document.getElementById('syncStatus').innerText = 'Đã hủy tải lên';
+                    return;
+                }
+                const previousCloud = JSON.parse(await readGistContent(existingGist));
+                const cloudBackup = previousCloud.format === 'kiotviet-encrypted-v1'
+                    ? previousCloud : await encryptSnapshot(previousCloud, passphrase);
+                downloadJsonBackup(cloudBackup, 'kiotviet-cloud-truoc-khi-ghi-de');
+            }
+            const encryptedData = await encryptSnapshot(currentDataSnapshot(), passphrase);
             const payload = {
                 files: {
                     "kiotviet_data.json": {
-                        content: JSON.stringify({ billStore, rawStore, updatedAt: new Date().toISOString() })
+                        content: JSON.stringify(encryptedData)
                     }
                 }
             };
 
-            const headers = {
-                'Content-Type': 'application/json',
-                'Authorization': `token ${gistConfig.token}`
-            };
+            headers['Content-Type'] = 'application/json';
 
-            const res = await fetch(`https://api.github.com/gists/${gistConfig.id}`, {
+            const res = await fetch(`https://api.github.com/gists/${id}`, {
                 method: 'PATCH',
                 headers: headers,
                 body: JSON.stringify(payload)
             });
 
-            if (res.ok) {
-                document.getElementById('syncStatus').innerText = 'Đã tải lên Cloud';
-                alert('Đã tải thành công toàn bộ dữ liệu lên GitHub Gist!');
-            } else {
-                const errData = await res.json();
-                throw new Error(errData.message || `Lỗi HTTP ${res.status}`);
-            }
+            const updatedGist = await readGistResponse(res);
+            setSyncClean(id, updatedGist.updated_at);
+            document.getElementById('syncStatus').innerText = 'Đã tải lên Cloud';
+            alert('Đã tải thành công toàn bộ dữ liệu lên GitHub Gist!');
         } catch (e) {
             document.getElementById('syncStatus').innerText = 'Lỗi tải lên Cloud';
             alert(`Tải lên thất bại! Chi tiết: ${e.message}`);
@@ -747,59 +1227,78 @@
     }
 
     async function loadDataFromCloud() {
-        if (!gistConfig.id) {
-            alert('Vui lòng nhập Gist ID ở góc dưới trước!');
+        const { token, id } = readGistConfig();
+        const passphrase = activePassphrase;
+        if (!id) {
+            alert('Vui lòng nhập Gist ID hợp lệ trong phần cấu hình.');
             return;
         }
 
         document.getElementById('syncStatus').innerText = 'Đang tải xuống...';
         try {
-            // Tối ưu Header để bypass CORS và Cache
             const headers = {
-                'Accept': 'application/vnd.github.v3+json'
+                'Accept': 'application/vnd.github+json'
             };
             
-            if (gistConfig.token) {
-                headers['Authorization'] = `token ${gistConfig.token}`;
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
             }
 
-            // Thêm timestamp đằng sau URL để ép trình duyệt gọi dữ liệu mới nhất
-            const cacheBuster = new Date().getTime();
-            const res = await fetch(`https://api.github.com/gists/${gistConfig.id}?t=${cacheBuster}`, {
+            let res = await fetch(`https://api.github.com/gists/${id}`, {
                 method: 'GET',
-                headers: headers
+                headers: headers,
+                cache: 'no-store'
             });
 
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.message || `Mã lỗi HTTP ${res.status}`);
+            let usedAnonymousFallback = false;
+            if (res.status === 401 && token) {
+                // Token cũ không được làm hỏng thao tác đọc Gist công khai.
+                res = await fetch(`https://api.github.com/gists/${id}`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/vnd.github+json' },
+                    cache: 'no-store'
+                });
+                if (!res.ok) throw new Error('Token không hợp lệ hoặc đã hết hạn. Gist này không đọc được khi bỏ token; hãy cập nhật token trong phần cấu hình.');
+                usedAnonymousFallback = true;
             }
 
-            const data = await res.json();
+            const data = await readGistResponse(res);
             
-            // Đọc nội dung file JSON từ Gist
-            let jsonContent = null;
-            if (data.files && data.files["kiotviet_data.json"]) {
-                jsonContent = data.files["kiotviet_data.json"].content;
-            } else if (data.files) {
-                const firstKey = Object.keys(data.files).find(k => k.endsWith('.json'));
-                if (firstKey) jsonContent = data.files[firstKey].content;
-            }
+            const jsonContent = await readGistContent(data);
 
             if (jsonContent) {
-                const content = JSON.parse(jsonContent);
-                billStore = content.billStore || {};
-                rawStore = content.rawStore || [];
-                
-                saveToLocalStorage();
+                const { content, encrypted } = await decodeSnapshot(JSON.parse(jsonContent), passphrase);
+                if (!validateDataSnapshot(content)) {
+                    throw new Error('Nội dung Gist không đúng định dạng dữ liệu hóa đơn. Dữ liệu trên máy chưa bị thay đổi.');
+                }
+                if (Object.keys(billStore).length && (syncState.dirty || syncState.gistId !== id)) {
+                    if (!confirm('Máy này có dữ liệu chưa đồng bộ. Tải xuống sẽ thay thế dữ liệu trên máy. Tiếp tục sau khi tải bản sao lưu?')) {
+                        document.getElementById('syncStatus').innerText = 'Đã hủy tải xuống';
+                        return;
+                    }
+                }
+                if (Object.keys(billStore).length && !await exportDataBackup()) {
+                    document.getElementById('syncStatus').innerText = 'Đã hủy tải xuống';
+                    return;
+                }
+                const files = content.importedFiles || [];
+                if (!await saveToLocalStorage(content.billStore, content.rawStore, files)) {
+                    throw new Error('Bộ nhớ trình duyệt đã đầy hoặc bị chặn. Dữ liệu trên máy chưa bị thay đổi.');
+                }
+                billStore = content.billStore;
+                rawStore = content.rawStore;
+                importedFiles = files;
+                setSyncClean(id, data.updated_at);
+
                 updateDateDropdown();
                 renderDashboard();
                 
                 document.getElementById('syncStatus').innerText = 'Đã cập nhật từ Cloud';
-                alert('Đã tải xuống và cập nhật dữ liệu thành công!');
-            } else {
-                throw new Error('Chưa có dữ liệu trên Cloud. Hãy bấm "Tải lên Cloud" từ máy chính trước!');
-            }
+                const notices = [];
+                if (!encrypted) notices.push('Gist cũ chưa mã hóa; hãy tải lên Cloud bằng mật khẩu mã hóa để bảo vệ dữ liệu.');
+                if (usedAnonymousFallback) notices.push('Token hiện tại không hợp lệ; hãy cập nhật token trước khi tải lên Cloud.');
+                alert(notices.length ? `Đã tải dữ liệu. ${notices.join(' ')}` : 'Đã tải xuống và cập nhật dữ liệu thành công!');
+            } else throw new Error('File dữ liệu trên Gist đang trống.');
         } catch (e) {
             document.getElementById('syncStatus').innerText = 'Lỗi tải xuống';
             alert(`Tải xuống thất bại! Chi tiết: ${e.message}`);
@@ -807,10 +1306,27 @@
     }
 
     function parseNumber(val) {
-        if (!val) return 0;
-        if (typeof val === 'number') return val;
-        const num = parseFloat(String(val).replace(/,/g, '').trim());
-        return isNaN(num) ? 0 : num;
+        if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
+        if (val == null || val === '') return 0;
+
+        let value = String(val).trim().replace(/[\s\u00a0\u202f₫đ]/gi, '');
+        const negative = /^\(.*\)$/.test(value);
+        value = value.replace(/[()]/g, '');
+        if (!/^-?[\d.,]+$/.test(value)) return 0;
+
+        const lastComma = value.lastIndexOf(',');
+        const lastDot = value.lastIndexOf('.');
+        const lastSeparator = Math.max(lastComma, lastDot);
+        const fractionalDigits = lastSeparator < 0 ? 0 : value.length - lastSeparator - 1;
+        const decimal = lastSeparator >= 0 && fractionalDigits > 0 && fractionalDigits <= 2;
+        if (decimal) {
+            value = value.slice(0, lastSeparator).replace(/[.,]/g, '') + '.' + value.slice(lastSeparator + 1);
+        } else {
+            value = value.replace(/[.,]/g, '');
+        }
+
+        const number = Number(value);
+        return Number.isFinite(number) ? (negative ? -number : number) : 0;
     }
 
     function formatVND(val) {
