@@ -1,0 +1,14 @@
+# Dữ liệu khách hàng, sao kê và bản sao lưu cá nhân
+*.xlsx
+*.xls
+*.csv
+*.tsv
+*.json
+*.zip
+*.bak
+
+# Thông tin đăng nhập và tệp tạm
+.env
+.env.*
+*.log
+node_modules/
