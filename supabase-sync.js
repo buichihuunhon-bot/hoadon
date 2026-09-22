@@ -7,6 +7,8 @@ const cloudClient = globalThis.supabase?.createClient(SUPABASE_URL, SUPABASE_PUB
 const CLOUD_META_KEY = 'kv_supabase_sync';
 const CLOUD_OWNER_KEY = 'kv_supabase_owner';
 let cloudUser = null;
+let cloudRole = null;
+let cloudOwnerId = null;
 let cloudRevision = null;
 let cloudReady = false;
 let cloudConflict = false;
@@ -45,12 +47,30 @@ function showCloudConnection() {
     document.getElementById('supabaseConnected').style.display = cloudUser ? 'flex' : 'none';
     document.getElementById('supabaseConflict').style.display = cloudConflict ? 'block' : 'none';
     document.getElementById('supabaseAccount').textContent = cloudUser
-        ? `Đang kết nối: ${cloudUser.email || 'tài khoản của bạn'}`
+        ? `${cloudUser.email || 'Tài khoản Cloud'} · ${cloudRole === 'admin' ? 'Admin' : cloudRole === 'accountant' ? 'Kế toán · Chỉ xem' : 'Chưa được phân quyền'}`
         : 'Đăng nhập Supabase để tự lưu và tải dữ liệu giữa các thiết bị.';
+}
+
+function canEditInvoices() { return cloudRole === 'admin'; }
+window.canEditInvoices = canEditInvoices;
+
+function applyRoleUI() {
+    const admin = cloudRole === 'admin';
+    document.getElementById('importPanel').style.display = admin ? '' : 'none';
+    document.getElementById('deleteDateButton').style.display = admin ? '' : 'none';
+    document.getElementById('backupActions').style.display = cloudRole === 'accountant' ? 'none' : '';
+    document.getElementById('legacyGist').style.display = admin ? '' : 'none';
+    document.getElementById('bankInputs').style.display = admin ? '' : 'none';
+    document.getElementById('bankReference').style.display = admin ? '' : 'none';
+    document.getElementById('bankReadOnly').style.display = cloudRole === 'accountant' ? 'grid' : 'none';
+    document.getElementById('bankSaveNote').style.display = admin ? '' : 'none';
 }
 
 function cloudError(error) {
     const message = error?.message || String(error);
+    if (/invoice_members/i.test(message)) {
+        return 'Chưa thiết lập phân quyền. Hãy chạy file supabase-roles.sql trong Supabase SQL Editor.';
+    }
     if (/invoice_snapshots|schema cache|relation .*does not exist/i.test(message)) {
         return 'Chưa tạo bảng Cloud. Hãy chạy file supabase-setup.sql trong Supabase SQL Editor.';
     }
@@ -59,7 +79,7 @@ function cloudError(error) {
 
 async function fetchCloudSnapshot() {
     const { data, error } = await cloudClient.from('invoice_snapshots')
-        .select('payload,revision').eq('user_id', cloudUser.id).maybeSingle();
+        .select('payload,revision').eq('user_id', cloudOwnerId).maybeSingle();
     if (error) throw error;
     return data;
 }
@@ -98,6 +118,8 @@ function stopCloudPolling() {
 async function connectCloud(user) {
     stopCloudPolling();
     cloudUser = user;
+    cloudRole = null;
+    cloudOwnerId = null;
     cloudReady = false;
     cloudConflict = false;
     showCloudConnection();
@@ -105,17 +127,41 @@ async function connectCloud(user) {
     if (existingOwner && existingOwner !== user.id && cloudHasLocalData()) {
         await cloudClient.auth.signOut();
         cloudUser = null;
+        applyRoleUI();
         showCloudConnection();
         setCloudStatus('Dữ liệu máy thuộc tài khoản Cloud khác', 'dirty');
         alert('Dữ liệu trên máy đã gắn với tài khoản Cloud khác. Hãy đăng nhập lại đúng tài khoản, hoặc dùng hồ sơ trình duyệt riêng. Không có dữ liệu nào được tải lên.');
         return;
     }
     try {
+        const { data: member, error: memberError } = await cloudClient.from('invoice_members')
+            .select('owner_id,role').eq('user_id', user.id).maybeSingle();
+        if (memberError) throw memberError;
+        if (!member) {
+            applyRoleUI();
+            showCloudConnection();
+            setCloudStatus('Tài khoản chưa được cấp quyền', 'dirty');
+            return;
+        }
+        cloudRole = member.role;
+        cloudOwnerId = member.owner_id;
+        applyRoleUI();
+        showCloudConnection();
         setCloudStatus('Đang kiểm tra Cloud...');
         const row = await fetchCloudSnapshot();
         const meta = cloudMeta();
         cloudRevision = meta.userId === user.id ? meta.revision ?? null : null;
         cloudDirty = meta.userId === user.id && !!meta.dirty || cloudDirty;
+        if (cloudRole === 'accountant') {
+            if (row) await applyCloudSnapshot(row, cloudHasLocalData() &&
+                (meta.userId !== user.id || meta.dirty || cloudDirty));
+            else setCloudStatus('Chỉ xem · Admin chưa đưa dữ liệu lên Cloud');
+            cloudDirty = false;
+            cloudReady = true;
+            saveCloudMeta(false);
+            cloudPollTimer = setInterval(refreshSupabaseCloud, 30000);
+            return;
+        }
         if (!row) {
             cloudRevision = null;
             cloudReady = true;
@@ -158,6 +204,9 @@ async function startSupabaseSync() {
         if (sessionError) throw sessionError;
         if (!sessionData.session) {
             cloudUser = null;
+            cloudRole = null;
+            cloudOwnerId = null;
+            applyRoleUI();
             showCloudConnection();
             setCloudStatus('Lưu trên máy · Chưa đăng nhập Cloud', 'dirty');
             return;
@@ -167,6 +216,9 @@ async function startSupabaseSync() {
         if (data.user) await connectCloud(data.user);
         else {
             cloudUser = null;
+            cloudRole = null;
+            cloudOwnerId = null;
+            applyRoleUI();
             showCloudConnection();
             setCloudStatus('Lưu trên máy · Chưa đăng nhập Cloud', 'dirty');
         }
@@ -217,13 +269,17 @@ async function signOutSupabase() {
     if (error) return alert(`Không đăng xuất được: ${cloudError(error)}`);
     stopCloudPolling();
     cloudUser = null;
+    cloudRole = null;
+    cloudOwnerId = null;
     cloudReady = false;
     cloudConflict = false;
+    applyRoleUI();
     showCloudConnection();
     setCloudStatus('Lưu trên máy · Đã đăng xuất Cloud', 'dirty');
 }
 
 function queueSupabaseSync(delay = 1200) {
+    if (cloudRole === 'accountant') return;
     cloudDirty = true;
     cloudChangeNumber++;
     if (cloudUser) saveCloudMeta(true);
@@ -245,6 +301,7 @@ function queueSupabaseSync(delay = 1200) {
 window.queueSupabaseSync = queueSupabaseSync;
 window.startSupabaseSync = startSupabaseSync;
 window.markSupabaseImported = function() {
+    if (cloudRole === 'accountant') return;
     cloudDirty = true;
     cloudChangeNumber++;
     clearTimeout(cloudSaveTimer);
@@ -257,7 +314,7 @@ window.markSupabaseImported = function() {
 };
 
 async function uploadSupabaseSnapshot() {
-    if (!cloudUser || !cloudReady || cloudConflict || cloudBusy || !activePassphrase || !cloudDirty) return;
+    if (!cloudUser || cloudRole !== 'admin' || !cloudReady || cloudConflict || cloudBusy || !activePassphrase || !cloudDirty) return;
     cloudBusy = true;
     const changeAtStart = cloudChangeNumber;
     try {
@@ -266,11 +323,11 @@ async function uploadSupabaseSnapshot() {
         let result;
         if (cloudRevision === null) {
             result = await cloudClient.from('invoice_snapshots')
-                .insert({ user_id: cloudUser.id, payload, revision: 1 }).select('revision').single();
+                .insert({ user_id: cloudOwnerId, payload, revision: 1 }).select('revision').single();
         } else {
             result = await cloudClient.from('invoice_snapshots')
                 .update({ payload, revision: cloudRevision + 1, updated_at: new Date().toISOString() })
-                .eq('user_id', cloudUser.id).eq('revision', cloudRevision)
+                .eq('user_id', cloudOwnerId).eq('revision', cloudRevision)
                 .select('revision').maybeSingle();
         }
         if (result.error) {
@@ -310,13 +367,17 @@ async function refreshSupabaseCloud() {
     try {
         const row = await fetchCloudSnapshot();
         if (!row) {
+            if (cloudRole === 'accountant') {
+                setCloudStatus('Chỉ xem · Admin chưa đưa dữ liệu lên Cloud');
+                return;
+            }
             if (cloudRevision !== null) throw new Error('Bản Cloud đã bị xóa bên ngoài ứng dụng.');
             if (cloudDirty) uploadSupabaseSnapshot();
             return;
         }
         if (row.revision === cloudRevision) {
-            if (cloudDirty) uploadSupabaseSnapshot();
-            else setCloudStatus('Đã đồng bộ Cloud');
+            if (cloudRole === 'admin' && cloudDirty) uploadSupabaseSnapshot();
+            else setCloudStatus(cloudRole === 'accountant' ? 'Chỉ xem · Đã cập nhật Cloud' : 'Đã đồng bộ Cloud');
             return;
         }
         if (cloudDirty) {
@@ -347,7 +408,7 @@ async function useSupabaseCloud() {
 }
 
 async function useSupabaseLocal() {
-    if (!cloudUser) return;
+    if (!cloudUser || cloudRole !== 'admin') return;
     if (!confirm('Đưa bản trên máy lên Cloud? Ứng dụng sẽ tải bản sao lưu Cloud cũ trước khi ghi đè.')) return;
     try {
         const row = await fetchCloudSnapshot();
@@ -378,3 +439,5 @@ window.addEventListener('online', () => {
 window.addEventListener('focus', () => {
     if (activePassphrase && cloudUser) refreshSupabaseCloud();
 });
+
+applyRoleUI();
