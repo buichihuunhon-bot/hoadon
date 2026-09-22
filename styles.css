@@ -213,6 +213,16 @@ td b { color: #243653; }
 .config-grid input { width: 100%; }
 .config-help { display: block; margin-top: 5px; color: #8997a9; font-size: 10px; }
 .config-grid .btn { white-space: nowrap; height: 42px; }
+.cloud-login { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto auto; gap: 10px; align-items: end; margin-top: 18px; }
+.cloud-login .form-group { margin: 0; }
+.cloud-login input { width: 100%; }
+.cloud-connected { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.cloud-conflict { margin-top: 16px; padding: 14px; border: 1px solid #f2d291; border-radius: 10px; background: #fff9e9; color: #704b0a; }
+.cloud-conflict p { margin: 5px 0 12px; font-size: 12px; }
+.cloud-conflict button { margin-right: 6px; }
+.legacy-gist { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.legacy-gist summary { cursor: pointer; color: #607088; font-size: 12px; }
+.legacy-gist .cloud-actions { margin-top: 12px; }
 
 /* Bill detail */
 .modal-backdrop { padding: 18px; backdrop-filter: blur(4px); background: rgba(17, 33, 57, .55); }
@@ -270,6 +280,7 @@ td b { color: #243653; }
     .summary-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .control-panel { grid-template-columns: 1fr; }
     .config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cloud-login { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 700px) {
     body { padding: 14px 12px 32px; }
@@ -287,6 +298,7 @@ td b { color: #243653; }
     .filter-box .btn-danger { grid-column: 1 / -1; }
     .cloud-top { align-items: stretch; flex-direction: column; }
     .config-grid { grid-template-columns: 1fr; }
+    .cloud-login { grid-template-columns: 1fr; }
     .config-grid .btn { width: 100%; }
     .bank-inputs { grid-template-columns: 1fr 1fr; }
     .bank-inputs .btn { grid-column: 1 / -1; }
