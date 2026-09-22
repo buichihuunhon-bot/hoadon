@@ -124,6 +124,8 @@ header {
 
 /* Overview */
 .section-heading, .table-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.print-header { display: none; }
+.table-heading-actions { display: flex; align-items: center; gap: 12px; }
 .section-heading { margin: 0 3px 16px; }
 .section-heading h2, .table-heading h2, .cloud-top h2 { margin-top: 2px; font-size: 21px; font-weight: 800; letter-spacing: -.045em; }
 .section-heading p, .table-hint { margin: 0 0 2px; color: var(--subtext); font-size: 12px; }
@@ -268,6 +270,11 @@ td b { color: #243653; }
 .bank-result.pending { background: #f3f6fa; color: #64758b; }
 .bank-result.matched { background: #e9f8f2; color: #137a58; }
 .bank-result.mismatch { background: #fff2ed; color: #ad4c32; }
+.bank-readonly { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.bank-readonly > div { padding: 11px 12px; border: 1px solid #e3eaf5; border-radius: 8px; background: #f8faff; }
+.bank-readonly span, .bank-readonly strong { display: block; }
+.bank-readonly span { color: #8290a2; font-size: 10px; }
+.bank-readonly strong { margin-top: 3px; color: #263b5b; font-size: 12px; overflow-wrap: anywhere; }
 .bank-save-note { margin: 7px 1px 0; color: #8b99aa; font-size: 10px; }
 .table-mini { min-width: 430px; border: 1px solid #e9eef4; border-radius: 8px; }
 .table-mini th, .table-mini td { padding: 9px 10px; }
@@ -297,6 +304,8 @@ td b { color: #243653; }
     .filter-box { grid-template-columns: 1fr 1fr; }
     .filter-box .btn-danger { grid-column: 1 / -1; }
     .cloud-top { align-items: stretch; flex-direction: column; }
+    .table-heading-actions { align-items: flex-end; flex-direction: column; }
+    .table-heading-actions .table-hint { display: none; }
     .config-grid { grid-template-columns: 1fr; }
     .cloud-login { grid-template-columns: 1fr; }
     .config-grid .btn { width: 100%; }
@@ -324,4 +333,32 @@ td b { color: #243653; }
     .bank-inputs .btn { grid-column: auto; }
     .amount-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; }
     .amount-item strong { margin-top: 0; text-align: right; }
+}
+
+@page { size: A4 landscape; margin: 12mm; }
+@media print {
+    body { padding: 0; background: #fff; color: #111; font-size: 10px; }
+    .container { max-width: none; }
+    header, .section-heading, .control-panel, .footer-config, .table-heading-actions, .modal-backdrop { display: none !important; }
+    .print-header { display: block; margin-bottom: 12px; }
+    .print-header h1 { margin: 0; font-size: 18px; }
+    .print-header p { margin: 3px 0 0; font-size: 10px; }
+    .summary-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-bottom: 12px; }
+    .summary-item { min-height: 0; padding: 7px 9px; border: 1px solid #bbb; border-radius: 3px; box-shadow: none; break-inside: avoid; }
+    .summary-item::before, .summary-foot { display: none; }
+    .summary-item .label { font-size: 9px; }
+    .summary-item .val, .summary-item .val.highlight, .summary-item .val.success { margin-top: 2px; color: #111; font-size: 12px; }
+    .table-section { border: 0; box-shadow: none; overflow: visible; }
+    .table-heading { padding: 0 0 5px; }
+    .table-heading .eyebrow { display: none; }
+    .table-heading h2 { font-size: 13px; }
+    .table-scroll { overflow: visible; }
+    #dashboardTable { min-width: 0; width: 100%; table-layout: fixed; }
+    #dashboardTable th, #dashboardTable td { padding: 5px 6px; border: 1px solid #ccc; font-size: 9px; overflow-wrap: anywhere; }
+    #dashboardTable th:last-child, #dashboardTable td:last-child { display: none; }
+    #dashboardTable th { color: #111; background: #eee !important; }
+    #dashboardTable thead { display: table-header-group; }
+    #dashboardTable tr { break-inside: avoid; }
+    .bill-time, .bill-bank-note { font-size: 8px; white-space: normal; }
+    .tip-badge { padding: 1px 3px; font-size: 8px; }
 }
