@@ -6,6 +6,7 @@
     <title>Đối Chiếu Hóa Đơn KiotViet - Dành Cho Kế Toán</title>
     <!-- SheetJS 0.20.3, lưu cùng ứng dụng để đọc Excel khi ngoại tuyến -->
     <script src="xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --bg: #f8fafc;
@@ -118,7 +119,7 @@
             <label for="password">Mật khẩu dữ liệu</label>
             <input type="password" id="password" autocomplete="current-password" placeholder="Ít nhất 10 ký tự" onkeydown="if (event.key === 'Enter') login()">
         </div>
-        <p class="auth-help">Lần đầu mở bản mới, hãy đặt mật khẩu và ghi nhớ. Mật khẩu này cũng dùng để đồng bộ Gist; quên mật khẩu sẽ không mở được dữ liệu đã mã hóa.</p>
+        <p class="auth-help">Lần đầu mở bản mới, hãy đặt mật khẩu và ghi nhớ. Mật khẩu này dùng để mã hóa dữ liệu trên máy và Supabase; quên mật khẩu sẽ không mở được dữ liệu đã mã hóa.</p>
         <button class="btn" onclick="login()">Mở dữ liệu <span aria-hidden="true">→</span></button>
         <button type="button" id="legacyBackupButton" class="btn-link legacy-backup" style="display: none;" onclick="exportLegacyBackup()">Tải bản sao lưu dữ liệu cũ</button>
     </div>
@@ -137,7 +138,7 @@
             <div class="user-info">
                 <span class="user-chip">Người dùng <b id="displayUser">--</b></span>
                 <span id="syncStatus" class="sync-chip" role="status">Lưu mã hóa trên thiết bị</span>
-                <button class="btn-link" onclick="logout()">Đăng xuất</button>
+                <button class="btn-link" onclick="logout()">Khóa dữ liệu</button>
             </div>
         </header>
 
@@ -227,18 +228,36 @@
             </table></div>
         </section>
 
-        <!-- BẢO MẬT & ĐỒNG BỘ GITHUB GIST -->
+        <!-- BẢO MẬT & ĐỒNG BỘ SUPABASE -->
         <div class="footer-config">
             <div class="cloud-top">
-                <div><div class="eyebrow">SAO LƯU & ĐỒNG BỘ</div><h2>GitHub Gist</h2><p>Chuyển dữ liệu giữa các thiết bị bằng Gist của bạn.</p></div>
+                <div><div class="eyebrow">SAO LƯU & ĐỒNG BỘ</div><h2>Đồng bộ tự động</h2><p id="supabaseAccount">Đăng nhập Supabase để tự lưu và tải dữ liệu giữa các thiết bị.</p></div>
                 <div class="cloud-actions">
-                    <button class="btn-success btn-sm" onclick="syncDataToCloud()">↑ Tải lên Cloud</button>
-                    <button class="btn-secondary btn-sm" onclick="loadDataFromCloud()">↓ Tải xuống Cloud</button>
                     <button class="btn-secondary btn-sm" onclick="exportDataBackup()">Sao lưu JSON</button>
                     <button class="btn-secondary btn-sm" onclick="document.getElementById('backupFile').click()">Khôi phục JSON</button>
                     <input type="file" id="backupFile" accept=".json,application/json" hidden onchange="restoreDataBackup(event)">
                 </div>
             </div>
+            <div class="cloud-login" id="supabaseLogin">
+                <div class="form-group"><label for="supabaseEmail">Email tài khoản</label><input type="email" id="supabaseEmail" autocomplete="email" placeholder="ban@example.com"></div>
+                <div class="form-group"><label for="supabasePassword">Mật khẩu tài khoản Supabase</label><input type="password" id="supabasePassword" autocomplete="current-password" placeholder="Mật khẩu đăng nhập Cloud"></div>
+                <button type="button" class="btn btn-sm" onclick="signInSupabase()">Đăng nhập Cloud</button>
+                <button type="button" class="btn-secondary btn-sm" onclick="signUpSupabase()">Tạo tài khoản</button>
+            </div>
+            <div class="cloud-connected" id="supabaseConnected" style="display: none;">
+                <button type="button" class="btn-secondary btn-sm" onclick="refreshSupabaseCloud()">Kiểm tra Cloud</button>
+                <button type="button" class="btn-secondary btn-sm" onclick="signOutSupabase()">Đăng xuất Cloud</button>
+            </div>
+            <div class="cloud-conflict" id="supabaseConflict" style="display: none;">
+                <strong>Cần chọn bản dữ liệu để tiếp tục đồng bộ.</strong>
+                <p>Hãy sao lưu JSON trước khi chọn. Nếu tải bản Cloud, dữ liệu trên máy sẽ được sao lưu rồi thay thế. Nếu đưa bản máy lên, bản Cloud cũ cũng được sao lưu.</p>
+                <button type="button" class="btn-secondary btn-sm" onclick="useSupabaseCloud()">Dùng bản Cloud</button>
+                <button type="button" class="btn-secondary btn-sm" onclick="useSupabaseLocal()">Đưa bản máy lên Cloud</button>
+            </div>
+            <details class="legacy-gist"><summary>Chuyển dữ liệu từ GitHub Gist cũ</summary>
+                <div class="cloud-actions">
+                    <button class="btn-secondary btn-sm" onclick="loadDataFromCloud()">Tải xuống Gist cũ</button>
+                </div>
             <button type="button" class="btn-link config-toggle" onclick="toggleConfig()" aria-controls="configSection">
                 Cấu hình kết nối Gist <span id="configArrow">▸</span>
             </button>
@@ -257,6 +276,7 @@
                     <button class="btn btn-sm" onclick="saveGistConfig()">Lưu cấu hình</button>
                 </div>
             </div>
+            </details>
         </div>
     </div>
 
@@ -463,6 +483,7 @@
         showAppScreen();
         updateDateDropdown();
         renderDashboard();
+        if (window.startSupabaseSync) window.startSupabaseSync();
     }
 
     function logout() {
@@ -537,6 +558,7 @@
             status.innerText = 'Có thay đổi chưa đồng bộ';
             status.className = 'sync-chip dirty';
         }
+        if (window.queueSupabaseSync) window.queueSupabaseSync();
     }
 
     function currentDataSnapshot() {
@@ -649,9 +671,10 @@
             rawStore = content.rawStore;
             importedFiles = files;
             markLocalDirty();
+            if (window.markSupabaseImported) window.markSupabaseImported();
             updateDateDropdown();
             renderDashboard();
-            alert('Đã khôi phục dữ liệu. Hãy kiểm tra lại trước khi tải lên Cloud.');
+            alert('Đã khôi phục dữ liệu. Hãy kiểm tra lại trạng thái đồng bộ Cloud.');
         } catch (error) {
             alert(`Khôi phục thất bại: ${error.message}`);
         } finally {
@@ -1289,6 +1312,7 @@
                 rawStore = content.rawStore;
                 importedFiles = files;
                 setSyncClean(id, data.updated_at);
+                if (window.markSupabaseImported) window.markSupabaseImported();
 
                 updateDateDropdown();
                 renderDashboard();
@@ -1344,5 +1368,6 @@
         return String(str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 </script>
+<script src="supabase-sync.js"></script>
 </body>
 </html>
