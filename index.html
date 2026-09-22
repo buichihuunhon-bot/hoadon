@@ -961,6 +961,16 @@
         return { transfer, tip, expected, received, difference: received === null ? null : received - expected };
     }
 
+    function renderBankNote(bank) {
+        if (bank.transfer <= 0) return '';
+        const pending = bank.received === null;
+        const state = pending ? 'pending' : bank.difference === 0 ? 'matched' : 'mismatch';
+        const amount = pending ? bank.expected : bank.received;
+        const detail = pending ? 'Chưa đối soát' : bank.difference === 0 ? 'Đã khớp' :
+            `Lệch ${bank.difference > 0 ? '+' : '-'}${formatVND(Math.abs(bank.difference)).replace(/\s*đ$/, 'đ')}`;
+        return `<span class="bill-bank-note ${state}${bank.tip > 0 ? ' has-tip' : ''}">${pending ? 'NH dự kiến' : 'NH đã nhận'} <b>${formatVND(amount)}</b> · ${detail}</span>`;
+    }
+
     function parseVndInput(value, optional = false) {
         const text = String(value).trim().replace(/\s/g, '');
         if (!text && optional) return null;
@@ -1045,9 +1055,7 @@
             const td4 = `<td>${escapeHtml(b.soHDDT || '-')}</td>`;
             const bank = getBankReconciliation(b);
             const tipBadge = bank.tip > 0 ? `<span class="tip-badge">TIP +${formatVND(bank.tip)}</span>` : '';
-            const bankNote = bank.transfer > 0
-                ? `<span class="bill-bank-note${bank.tip > 0 ? ' has-tip' : ''}">NH dự kiến <b>${formatVND(bank.expected)}</b> · ${bank.difference === null ? 'Chưa đối soát' : bank.difference === 0 ? 'Đã khớp' : 'Có chênh lệch'}</span>`
-                : '';
+            const bankNote = renderBankNote(bank);
             const td5 = `<td><div class="payment-cell-title">${escapeHtml(b.paymentSummary)}${tipBadge}</div>${bankNote}</td>`;
             const td6 = '<td style="text-align: center;"><button class="btn-detail" type="button">Xem chi tiết bill</button></td>';
 
