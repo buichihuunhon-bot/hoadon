@@ -1,20 +1,24 @@
 # Hướng dẫn sử dụng đối chiếu hóa đơn
 
-## Mở bản mới
+## Mở dữ liệu
 
-Giữ `index.html`, `styles.css` và `xlsx.full.min.js` trong cùng thư mục. Mở `index.html` bằng Chrome hoặc Edge.
+Giữ `index.html`, `styles.css`, `supabase-sync.js` và `xlsx.full.min.js` trong cùng thư mục nếu mở trên máy. Ứng dụng cũng có thể chạy trên GitHub Pages.
 
-Lần đầu mở bản mới trên máy đang có dữ liệu, nhập **một mật khẩu dữ liệu mới từ 10 ký tự trở lên**. Trang sẽ tải một bản sao lưu mã hóa trước khi chuyển dữ liệu cũ trên máy sang dạng mã hóa. Từ lần sau, cần nhập lại đúng mật khẩu này. Tên người sử dụng chỉ là nhãn hiển thị, không phải tài khoản được xác thực trên máy chủ.
+Lần đầu mở bản mới trên máy đang có dữ liệu, nhập **mật khẩu dữ liệu từ 10 ký tự trở lên**. Trang tải một bản sao lưu mã hóa trước khi chuyển dữ liệu cũ trên máy sang dạng mã hóa. Từ lần sau, cần nhập lại đúng mật khẩu này. Tên người sử dụng chỉ là nhãn hiển thị, không phải tài khoản Cloud.
 
-Nếu trình duyệt không đủ dung lượng để mã hóa dữ liệu cũ, trang giữ nguyên dữ liệu cũ và hiện nút **Tải bản sao lưu dữ liệu cũ**.
+Nếu trình duyệt không đủ dung lượng để mã hóa dữ liệu cũ, trang giữ nguyên dữ liệu cũ và hiện nút **Tải bản sao lưu dữ liệu cũ**. Quên mật khẩu dữ liệu sẽ không giải mã được bản sao lưu hoặc bản Cloud.
 
-## Đồng bộ Gist
+## Đồng bộ tự động qua Supabase
 
-Trên máy chính, nhập Gist ID và GitHub token rồi chọn **Tải lên Cloud**. Dữ liệu tải lên được mã hóa bằng mật khẩu dùng để mở dữ liệu trên máy. Gist cũ chưa mã hóa vẫn có thể kéo xuống; sau khi kiểm tra, tải lên lại để chuyển Gist sang dạng mã hóa.
+Sau khi người quản lý dự án chạy `supabase-setup.sql`, vào mục **Đồng bộ tự động** trên trang để tạo tài khoản email hoặc đăng nhập Cloud. Phiên đăng nhập Cloud được trình duyệt lưu; bạn vẫn nhập mật khẩu dữ liệu khi mở ứng dụng để giải mã. Dùng cùng tài khoản Cloud và cùng mật khẩu dữ liệu trên các thiết bị.
 
-Trên máy khác, mở cùng bản ứng dụng, nhập **cùng mật khẩu dữ liệu**, nhập Gist ID rồi chọn **Tải xuống Cloud**. Token chỉ được giữ trong phiên trình duyệt hiện tại và cần nhập lại ở phiên sau.
+Ứng dụng tự lưu các thay đổi lên Cloud khi có kết nối, và kiểm tra bản mới khi mở trang, quay lại tab hoặc sau khoảng 30 giây. Đọc nhãn trạng thái ở đầu trang để biết dữ liệu đã lên Cloud hay chưa. Nếu có xung đột giữa thiết bị, hãy chọn bản cần giữ trong mục **Đồng bộ tự động**; ứng dụng sẽ tải bản sao lưu mã hóa trước khi thay thế dữ liệu cũ.
 
-Trước khi Push hoặc Pull có thể ghi đè dữ liệu đã thay đổi, trang sẽ cảnh báo và tải bản sao lưu. Nút **Sao lưu JSON** và **Khôi phục JSON** dùng cùng mật khẩu dữ liệu. Hãy giữ cả tệp sao lưu lẫn mật khẩu ở nơi an toàn; quên mật khẩu sẽ không giải mã được dữ liệu đã mã hóa.
+Bạn có thể dùng **Sao lưu JSON** và **Khôi phục JSON** để chuyển dữ liệu thủ công. Khi khôi phục bản sao lưu hoặc tải Gist cũ trong lúc đã có dữ liệu Cloud, ứng dụng yêu cầu chọn bản để tránh ghi đè âm thầm.
+
+## Gist cũ
+
+Mục **Chuyển dữ liệu từ GitHub Gist cũ** chỉ dùng để nhập dữ liệu từ hệ thống đồng bộ trước đây. Gist ID và token không cần thiết cho tự đồng bộ Supabase. Nếu dùng Gist cũ, token chỉ được giữ trong phiên trình duyệt hiện tại.
 
 ## Nhập Excel và đối soát ngân hàng
 
