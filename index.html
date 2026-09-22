@@ -150,6 +150,7 @@
             </div>
             <p>Số liệu theo ngày và từ khóa đang chọn</p>
         </div>
+        <div id="printHeader" class="print-header"><h1>Báo cáo hóa đơn</h1><p id="printContext"></p></div>
         <div class="summary-bar">
             <div class="summary-item">
                 <span class="label">Số lượng hóa đơn</span>
@@ -185,7 +186,7 @@
 
         <!-- CONTROL PANEL & IMPORT -->
         <div class="control-panel">
-            <div class="import-box">
+            <div class="import-box" id="importPanel" style="display: none;">
                 <div class="control-heading">
                     <div class="control-icon">↑</div>
                     <div><strong>Nhập dữ liệu</strong><span>Chọn một hoặc nhiều file Excel từ KiotViet</span></div>
@@ -204,13 +205,13 @@
                     <label for="searchInput">Tìm kiếm</label>
                     <input type="text" id="searchInput" placeholder="Tìm Mã HĐ / SĐT / Tên..." onkeyup="renderDashboard()">
                 </div>
-                <button class="btn-danger" onclick="deleteCurrentDateData()">Xóa dữ liệu ngày chọn</button>
+                <button class="btn-danger" id="deleteDateButton" style="display: none;" onclick="deleteCurrentDateData()">Xóa dữ liệu ngày chọn</button>
             </div>
         </div>
 
         <!-- DASHBOARD TỔNG QUAN -->
         <section class="table-section">
-            <div class="table-heading"><div><div class="eyebrow">DANH SÁCH</div><h2>Hóa đơn</h2></div><span class="table-hint">Chuyển khoản trước · Mới nhất trước trong từng nhóm</span></div>
+            <div class="table-heading"><div><div class="eyebrow">DANH SÁCH</div><h2>Hóa đơn</h2></div><div class="table-heading-actions"><span class="table-hint">Chuyển khoản trước · Mới nhất trước trong từng nhóm</span><button type="button" class="btn-secondary btn-sm print-button" onclick="printInvoiceReport()">In báo cáo</button></div></div>
             <div class="table-scroll"><table id="dashboardTable">
             <thead>
                 <tr>
@@ -232,7 +233,7 @@
         <div class="footer-config">
             <div class="cloud-top">
                 <div><div class="eyebrow">SAO LƯU & ĐỒNG BỘ</div><h2>Đồng bộ tự động</h2><p id="supabaseAccount">Đăng nhập Supabase để tự lưu và tải dữ liệu giữa các thiết bị.</p></div>
-                <div class="cloud-actions">
+                <div class="cloud-actions" id="backupActions">
                     <button class="btn-secondary btn-sm" onclick="exportDataBackup()">Sao lưu JSON</button>
                     <button class="btn-secondary btn-sm" onclick="document.getElementById('backupFile').click()">Khôi phục JSON</button>
                     <input type="file" id="backupFile" accept=".json,application/json" hidden onchange="restoreDataBackup(event)">
@@ -254,7 +255,7 @@
                 <button type="button" class="btn-secondary btn-sm" onclick="useSupabaseCloud()">Dùng bản Cloud</button>
                 <button type="button" class="btn-secondary btn-sm" onclick="useSupabaseLocal()">Đưa bản máy lên Cloud</button>
             </div>
-            <details class="legacy-gist"><summary>Chuyển dữ liệu từ GitHub Gist cũ</summary>
+            <details class="legacy-gist" id="legacyGist" style="display: none;"><summary>Chuyển dữ liệu từ GitHub Gist cũ</summary>
                 <div class="cloud-actions">
                     <button class="btn-secondary btn-sm" onclick="loadDataFromCloud()">Tải xuống Gist cũ</button>
                 </div>
@@ -323,14 +324,15 @@
                 <div><span>Tip chuyển khoản</span><strong id="mTipAmount">0 đ</strong></div>
                 <div class="bank-expected"><span>Ngân hàng dự kiến</span><strong id="mBankExpected">0 đ</strong></div>
             </div>
-            <div class="bank-inputs">
+            <div class="bank-inputs" id="bankInputs" style="display: none;">
                 <div class="form-group"><label for="tipInput">Tip chuyển khoản (đ)</label><input type="text" inputmode="numeric" id="tipInput" placeholder="0" oninput="formatMoneyInput(this)"></div>
                 <div class="form-group"><label for="bankReceivedInput">Thực nhận trên sao kê (đ)</label><input type="text" inputmode="numeric" id="bankReceivedInput" placeholder="Để trống nếu chưa đối soát" oninput="formatMoneyInput(this)"></div>
                 <button type="button" class="btn btn-sm" onclick="saveBankReconciliation()">Lưu đối soát</button>
             </div>
-            <div class="form-group bank-reference"><label for="bankReferenceInput">Mã giao dịch / nội dung chuyển khoản</label><input type="text" id="bankReferenceInput" maxlength="120" placeholder="Ghi để tra cứu trên sao kê"></div>
+            <div class="form-group bank-reference" id="bankReference" style="display: none;"><label for="bankReferenceInput">Mã giao dịch / nội dung chuyển khoản</label><input type="text" id="bankReferenceInput" maxlength="120" placeholder="Ghi để tra cứu trên sao kê"></div>
+            <div id="bankReadOnly" class="bank-readonly" style="display: none;"><div><span>Thực nhận trên sao kê</span><strong id="mBankReceivedReadOnly">Chưa đối soát</strong></div><div><span>Mã giao dịch / nội dung chuyển khoản</span><strong id="mBankReferenceReadOnly">—</strong></div></div>
             <div id="mBankDifference" class="bank-result"></div>
-            <p class="bank-save-note">Dấu chấm phân cách hàng nghìn được thêm tự động. Dùng “Tải lên Cloud” để đồng bộ sang máy khác.</p>
+            <p class="bank-save-note" id="bankSaveNote">Dấu chấm phân cách hàng nghìn được thêm tự động. Thay đổi sẽ tự đồng bộ lên Cloud.</p>
         </div>
 
         <div class="bill-section bill-items">
@@ -657,6 +659,10 @@
     }
 
     async function restoreDataBackup(event) {
+        if (!window.canEditInvoices?.()) {
+            event.target.value = '';
+            return alert('Tài khoản kế toán chỉ có quyền xem và in báo cáo.');
+        }
         const input = event.target;
         const file = input.files[0];
         if (!file) return;
@@ -739,6 +745,10 @@
     document.getElementById('excelFiles').addEventListener('change', handleImportFiles);
 
     async function handleImportFiles(e) {
+        if (!window.canEditInvoices?.()) {
+            e.target.value = '';
+            return alert('Tài khoản kế toán không có quyền nhập dữ liệu.');
+        }
         const files = Array.from(e.target.files);
         if (!files.length) return;
 
@@ -1047,6 +1057,16 @@
         });
     }
 
+    function printInvoiceReport() {
+        const date = document.getElementById('dateFilter').value;
+        const keyword = document.getElementById('searchInput').value.trim();
+        const parts = [date === 'ALL' ? 'Tất cả ngày' : `Ngày ${date}`];
+        if (keyword) parts.push(`Tìm kiếm: ${keyword}`);
+        parts.push(`In lúc ${new Date().toLocaleString('vi-VN')}`);
+        document.getElementById('printContext').textContent = parts.join(' · ');
+        window.print();
+    }
+
     function openBillModal(maHD) {
         const b = billStore[maHD];
         if (!b) return;
@@ -1076,6 +1096,8 @@
             document.getElementById('tipInput').value = bank.tip ? formatVndInputValue(bank.tip) : '';
             document.getElementById('bankReceivedInput').value = bank.received === null ? '' : formatVndInputValue(bank.received);
             document.getElementById('bankReferenceInput').value = b.bankReference || '';
+            document.getElementById('mBankReceivedReadOnly').innerText = bank.received === null ? 'Chưa đối soát' : formatVND(bank.received);
+            document.getElementById('mBankReferenceReadOnly').innerText = b.bankReference || '—';
             const result = document.getElementById('mBankDifference');
             result.className = 'bank-result ' + (bank.difference === null ? 'pending' : bank.difference === 0 ? 'matched' : 'mismatch');
             result.innerText = bank.difference === null ? 'Chưa nhập số tiền trên sao kê' :
@@ -1114,6 +1136,7 @@
     }
 
     async function saveBankReconciliation() {
+        if (!window.canEditInvoices?.()) return alert('Bạn cần quyền admin để lưu đối soát.');
         const bill = activeBillId && billStore[activeBillId];
         if (!bill || getTransferAmount(bill) <= 0) return;
 
@@ -1144,6 +1167,7 @@
     }
 
     async function deleteCurrentDateData() {
+        if (!window.canEditInvoices?.()) return alert('Bạn cần quyền admin để xóa dữ liệu.');
         const selectedDate = document.getElementById('dateFilter').value;
         if (selectedDate === 'ALL') {
             return alert('Vui lòng chọn một ngày cụ thể trong danh sách "Ngày HĐ" để xóa.');
@@ -1188,6 +1212,7 @@
 
     // --- ĐỒNG BỘ CLOUD (ĐÃ TỐI ƯU HÀM PULL & PUSH) ---
     async function syncDataToCloud() {
+        if (!window.canEditInvoices?.()) return alert('Bạn cần quyền admin để tải dữ liệu lên Gist.');
         const { token, id } = readGistConfig();
         const passphrase = activePassphrase;
         if (!token || !id) {
@@ -1250,6 +1275,7 @@
     }
 
     async function loadDataFromCloud() {
+        if (!window.canEditInvoices?.()) return alert('Bạn cần quyền admin để thay thế dữ liệu từ Gist.');
         const { token, id } = readGistConfig();
         const passphrase = activePassphrase;
         if (!id) {
