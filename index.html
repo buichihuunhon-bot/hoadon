@@ -326,8 +326,13 @@
 
         <div class="bill-section bank-reconcile" id="bankReconcileSection" style="display: none;">
             <div class="bill-section-title">Đối soát chuyển khoản</div>
+            <div id="transactionGroupPanel" class="transaction-group-panel" style="display: none;">
+                <div class="transaction-group-head"><div><span>Giao dịch liên kết</span><strong id="transactionGroupId">—</strong></div><div id="transactionGroupActions" class="transaction-group-actions"><button type="button" class="btn-secondary btn-sm" onclick="openLinkBillsModal()">Chỉnh liên kết</button><button type="button" class="btn-secondary btn-sm" onclick="unlinkActiveBill()">Gỡ bill này</button></div></div>
+                <div id="transactionGroupBills" class="transaction-group-bills"></div>
+            </div>
+            <button type="button" id="linkTransactionButton" class="btn-secondary btn-sm link-transaction-button" style="display: none;" onclick="openLinkBillsModal()">Liên kết với bill cùng ngày</button>
             <div class="bank-breakdown">
-                <div><span>Chuyển khoản trên bill</span><strong id="mTransferAmount">0 đ</strong></div>
+                <div><span id="mTransferLabel">Chuyển khoản trên bill</span><strong id="mTransferAmount">0 đ</strong></div>
                 <div><span>Tip chuyển khoản</span><strong id="mTipAmount">0 đ</strong></div>
                 <div class="bank-expected"><span>Ngân hàng dự kiến</span><strong id="mBankExpected">0 đ</strong></div>
             </div>
@@ -360,6 +365,16 @@
     </div>
 </div>
 
+<div id="linkBillsModal" class="modal-backdrop link-bills-modal" role="dialog" aria-modal="true" aria-labelledby="linkBillsTitle">
+    <div class="modal-content link-bills-content">
+        <div class="modal-header"><div><div class="eyebrow">GIAO DỊCH NGÂN HÀNG</div><h2 id="linkBillsTitle">Liên kết bill cùng ngày</h2><span id="linkBillsDate">—</span></div><button type="button" class="modal-close" onclick="closeLinkBillsModal()" aria-label="Đóng">&times;</button></div>
+        <p class="link-bills-help">Chọn các bill được khách thanh toán trong cùng một giao dịch. Bill thuộc giao dịch khác sẽ không thể chọn.</p>
+        <div id="linkBillsOptions" class="link-bills-options"></div>
+        <div class="link-bills-total"><span>Tổng chuyển khoản đã chọn</span><strong id="linkBillsTotal">0 đ</strong></div>
+        <div class="modal-footer"><button type="button" class="btn-secondary btn-sm" onclick="closeLinkBillsModal()">Hủy</button><button type="button" class="btn btn-sm" onclick="saveBillLinks()">Lưu liên kết</button></div>
+    </div>
+</div>
+
 <script>
     // --- STATE MANAGEMENT ---
     let currentUser = null;
@@ -369,8 +384,10 @@
     let rawStore = []; 
     let billStore = {}; 
     let importedFiles = [];
+    let bankTransactionGroups = {};
     let syncState = { gistId: '', cloudUpdatedAt: '', dirty: false };
     let activeBillId = null;
+    let pendingLinkSelection = new Set();
 
     // --- INITIALIZATION ---
     window.onload = function() {
@@ -467,6 +484,7 @@
                 billStore = content.billStore;
                 rawStore = content.rawStore;
                 importedFiles = content.importedFiles || [];
+                bankTransactionGroups = content.bankTransactionGroups || {};
             } else {
                 loadFromLocalStorage();
                 const hasLegacyData = localStorage.getItem('kv_bill_store') !== null ||
@@ -511,10 +529,10 @@
         status.className = syncState.dirty ? 'sync-chip dirty' : 'sync-chip';
     }
 
-    async function saveToLocalStorage(bills = billStore, rows = rawStore, files = importedFiles, passphrase = activePassphrase) {
+    async function saveToLocalStorage(bills = billStore, rows = rawStore, files = importedFiles, passphrase = activePassphrase, groups = bankTransactionGroups) {
         try {
             if (!passphrase) throw new Error('Chưa mở dữ liệu bằng mật khẩu.');
-            const encrypted = await encryptSnapshot({ billStore: bills, rawStore: rows, importedFiles: files }, passphrase);
+            const encrypted = await encryptSnapshot({ billStore: bills, rawStore: rows, importedFiles: files, bankTransactionGroups: groups }, passphrase);
             localStorage.setItem('kv_encrypted_store', JSON.stringify(encrypted));
             localStorage.removeItem('kv_bill_store');
             localStorage.removeItem('kv_raw_store');
@@ -571,13 +589,14 @@
     }
 
     function currentDataSnapshot() {
-        return { schemaVersion: 2, billStore, rawStore, importedFiles, updatedAt: new Date().toISOString() };
+        return { schemaVersion: 3, billStore, rawStore, importedFiles, bankTransactionGroups, updatedAt: new Date().toISOString() };
     }
 
     function validateDataSnapshot(content) {
         return content && content.billStore && typeof content.billStore === 'object' && !Array.isArray(content.billStore) &&
             Array.isArray(content.rawStore) &&
             (content.importedFiles === undefined || Array.isArray(content.importedFiles)) &&
+            (content.bankTransactionGroups === undefined || (content.bankTransactionGroups && typeof content.bankTransactionGroups === 'object' && !Array.isArray(content.bankTransactionGroups))) &&
             Object.values(content.billStore).every(b => b && typeof b.maHD === 'string' &&
                 typeof b.ngay === 'string' && typeof b.tenKH === 'string' &&
                 typeof b.sdt === 'string' && typeof b.soHDDT === 'string' && Array.isArray(b.items));
@@ -679,10 +698,12 @@
             if (!confirm(`Khôi phục ${Object.keys(content.billStore).length} hóa đơn từ ${file.name}? Dữ liệu hiện tại sẽ được sao lưu rồi thay thế.`)) return;
             if (Object.keys(billStore).length && !await exportDataBackup()) return;
             const files = content.importedFiles || [];
-            if (!await saveToLocalStorage(content.billStore, content.rawStore, files)) throw new Error('Không đủ dung lượng lưu trên trình duyệt. Dữ liệu hiện tại chưa thay đổi.');
+            const groups = content.bankTransactionGroups || {};
+            if (!await saveToLocalStorage(content.billStore, content.rawStore, files, activePassphrase, groups)) throw new Error('Không đủ dung lượng lưu trên trình duyệt. Dữ liệu hiện tại chưa thay đổi.');
             billStore = content.billStore;
             rawStore = content.rawStore;
             importedFiles = files;
+            bankTransactionGroups = groups;
             markLocalDirty();
             if (window.markSupabaseImported) window.markSupabaseImported();
             updateDateDropdown();
@@ -938,11 +959,19 @@
 
     function sortBillsForDashboard(bills) {
         const paymentRank = bill => bill.paymentSummary === 'Chuyển khoản' ? 0 : bill.paymentSummary === 'Tiền mặt' ? 2 : 1;
-        return bills.sort((a, b) =>
-            paymentRank(a) - paymentRank(b) ||
-            getBillTimestamp(b) - getBillTimestamp(a) ||
-            a.maHD.localeCompare(b.maHD, 'vi', { numeric: true })
-        );
+        const buckets = new Map();
+        bills.forEach(bill => {
+            const validGroup = bill.bankGroupId && bankTransactionGroups[bill.bankGroupId];
+            const key = validGroup ? `group:${bill.bankGroupId}` : `bill:${bill.maHD}`;
+            if (!buckets.has(key)) buckets.set(key, []);
+            buckets.get(key).push(bill);
+        });
+        const groups = [...buckets.entries()].map(([key, members]) => {
+            members.sort((a, b) => getBillTimestamp(b) - getBillTimestamp(a) || a.maHD.localeCompare(b.maHD, 'vi', { numeric: true }));
+            return { key, members, rank: Math.min(...members.map(paymentRank)), timestamp: Math.max(...members.map(getBillTimestamp)) };
+        });
+        groups.sort((a, b) => a.rank - b.rank || b.timestamp - a.timestamp || a.key.localeCompare(b.key, 'vi', { numeric: true }));
+        return groups.flatMap(group => group.members);
     }
 
     function formatBillTime(bill) {
@@ -958,14 +987,28 @@
         return bill.paymentSummary === 'Chuyển khoản' ? Number(bill.khachDaTra) || 0 : 0;
     }
 
+    function getBankGroupForBill(bill) {
+        return bill?.bankGroupId ? bankTransactionGroups[bill.bankGroupId] || null : null;
+    }
+
+    function getGroupBills(group) {
+        return (group?.billIds || []).map(id => billStore[id]).filter(Boolean);
+    }
+
+    function getGroupLeaderId(group) {
+        return getGroupBills(group).sort((a, b) => getBillTimestamp(b) - getBillTimestamp(a) || a.maHD.localeCompare(b.maHD, 'vi', { numeric: true }))[0]?.maHD || null;
+    }
+
     function getBankReconciliation(bill) {
-        const transfer = getTransferAmount(bill);
-        const rawTip = Number(bill.tipChuyenKhoan);
+        const group = getBankGroupForBill(bill);
+        const transfer = group ? getGroupBills(group).reduce((sum, item) => sum + getTransferAmount(item), 0) : getTransferAmount(bill);
+        const rawTip = Number(group ? group.tipChuyenKhoan : bill.tipChuyenKhoan);
         const tip = Number.isSafeInteger(rawTip) && rawTip >= 0 ? rawTip : 0;
         const expected = transfer + tip;
-        const rawReceived = bill.bankReceived == null || bill.bankReceived === '' ? null : Number(bill.bankReceived);
+        const sourceReceived = group ? group.bankReceived : bill.bankReceived;
+        const rawReceived = sourceReceived == null || sourceReceived === '' ? null : Number(sourceReceived);
         const received = Number.isSafeInteger(rawReceived) && rawReceived >= 0 ? rawReceived : null;
-        return { transfer, tip, expected, received, difference: received === null ? null : received - expected };
+        return { transfer, tip, expected, received, difference: received === null ? null : received - expected, group, groupId: group?.id || null };
     }
 
     function renderBankNote(bank) {
@@ -1008,20 +1051,20 @@
         const currentDate = document.getElementById('dateFilter').value;
         const searchInput = document.getElementById('searchInput').value.trim().toLowerCase();
 
-        const bills = sortBillsForDashboard(Object.values(billStore).filter(b => {
-            const matchDate = (currentDate === 'ALL' || b.ngay === currentDate);
-            const matchSearch = (!searchInput || 
+        const dateBills = Object.values(billStore).filter(b => currentDate === 'ALL' || b.ngay === currentDate);
+        const directlyMatched = dateBills.filter(b => !searchInput ||
                 b.maHD.toLowerCase().includes(searchInput) || 
                 b.tenKH.toLowerCase().includes(searchInput) || 
                 b.sdt.includes(searchInput) ||
                 b.soHDDT.toLowerCase().includes(searchInput));
-            return matchDate && matchSearch;
-        }));
+        const matchedGroups = new Set(directlyMatched.map(b => b.bankGroupId).filter(Boolean));
+        const bills = sortBillsForDashboard(dateBills.filter(b => directlyMatched.includes(b) || matchedGroups.has(b.bankGroupId)));
 
         let totalDoanhThu = 0;
         let totalTienMat = 0;
         let totalChuyenKhoan = 0;
         let totalTip = 0;
+        const countedGroups = new Set();
 
         bills.forEach(b => {
             const daTra = b.khachDaTra || 0;
@@ -1035,7 +1078,14 @@
 
             const transfer = getTransferAmount(b);
             totalChuyenKhoan += transfer;
-            if (transfer > 0) totalTip += getBankReconciliation(b).tip;
+            if (transfer > 0) {
+                const group = getBankGroupForBill(b);
+                if (!group) totalTip += getBankReconciliation(b).tip;
+                else if (!countedGroups.has(group.id)) {
+                    totalTip += getBankReconciliation(b).tip;
+                    countedGroups.add(group.id);
+                }
+            }
         });
 
         document.getElementById('sumCount').innerText = bills.length;
@@ -1061,13 +1111,18 @@
             const td3 = `<td class="num">${formatVND(b.khachDaTra)}</td>`;
             const td4 = `<td>${escapeHtml(b.soHDDT || '-')}</td>`;
             const bank = getBankReconciliation(b);
-            const tipBadge = bank.tip > 0 ? `<span class="tip-badge">TIP +${formatVND(bank.tip)}</span>` : '';
+            const isGroupLeader = !bank.group || getGroupLeaderId(bank.group) === b.maHD;
+            const tipBadge = bank.tip > 0 && isGroupLeader ? `<span class="tip-badge">TIP +${formatVND(bank.tip)}</span>` : '';
             const correctionBadge = b.paymentCorrection ? '<span class="correction-badge">ĐÃ SỬA</span>' : '';
-            const bankNote = renderBankNote(bank);
-            const td5 = `<td><div class="payment-cell-title">${escapeHtml(b.paymentSummary)}${tipBadge}${correctionBadge}</div>${bankNote}</td>`;
+            const groupBadge = bank.group ? `<span class="transaction-group-badge">${escapeHtml(bank.group.id)} · ${bank.group.billIds.length} bill</span>` : '';
+            const bankNote = bank.group && !isGroupLeader
+                ? `<span class="bill-bank-note group-member-note">Cùng giao dịch ${escapeHtml(bank.group.id)}</span>`
+                : renderBankNote(bank);
+            const td5 = `<td><div class="payment-cell-title">${escapeHtml(b.paymentSummary)}${tipBadge}${correctionBadge}${groupBadge}</div>${bankNote}</td>`;
             const td6 = '<td style="text-align: center;"><button class="btn-detail" type="button">Xem chi tiết bill</button></td>';
 
             tr.innerHTML = td1 + td2 + td3 + td4 + td5 + td6;
+            if (bank.group) tr.className = `transaction-group-row ${isGroupLeader ? 'group-leader' : 'group-member'}`;
             tr.querySelector('.btn-detail').addEventListener('click', () => openBillModal(b.maHD));
             tbody.appendChild(tr);
         });
@@ -1116,14 +1171,27 @@
         const bankSection = document.getElementById('bankReconcileSection');
         bankSection.style.display = bank.transfer > 0 ? 'block' : 'none';
         if (bank.transfer > 0) {
+            const group = bank.group;
+            const groupPanel = document.getElementById('transactionGroupPanel');
+            groupPanel.style.display = group ? 'block' : 'none';
+            document.getElementById('linkTransactionButton').style.display = !group && window.canEditInvoices?.() ? '' : 'none';
+            document.getElementById('transactionGroupActions').style.display = group && window.canEditInvoices?.() ? 'flex' : 'none';
+            document.getElementById('mTransferLabel').innerText = group ? `Tổng chuyển khoản · ${group.billIds.length} bill` : 'Chuyển khoản trên bill';
+            if (group) {
+                document.getElementById('transactionGroupId').innerText = group.id;
+                document.getElementById('transactionGroupBills').innerHTML = getGroupBills(group)
+                    .sort((a, b) => getBillTimestamp(b) - getBillTimestamp(a))
+                    .map(item => `<div${item.maHD === b.maHD ? ' class="current"' : ''}><span>${escapeHtml(item.maHD)} · ${escapeHtml(formatBillTime(item))} · ${escapeHtml(item.tenKH || 'Khách lẻ')}</span><strong>${formatVND(getTransferAmount(item))}</strong></div>`).join('');
+            }
             document.getElementById('mTransferAmount').innerText = formatVND(bank.transfer);
             document.getElementById('mTipAmount').innerText = formatVND(bank.tip);
             document.getElementById('mBankExpected').innerText = formatVND(bank.expected);
             document.getElementById('tipInput').value = bank.tip ? formatVndInputValue(bank.tip) : '';
             document.getElementById('bankReceivedInput').value = bank.received === null ? '' : formatVndInputValue(bank.received);
-            document.getElementById('bankReferenceInput').value = b.bankReference || '';
+            const bankReference = group ? group.bankReference : b.bankReference;
+            document.getElementById('bankReferenceInput').value = bankReference || '';
             document.getElementById('mBankReceivedReadOnly').innerText = bank.received === null ? 'Chưa đối soát' : formatVND(bank.received);
-            document.getElementById('mBankReferenceReadOnly').innerText = b.bankReference || '—';
+            document.getElementById('mBankReferenceReadOnly').innerText = bankReference || '—';
             const result = document.getElementById('mBankDifference');
             result.className = 'bank-result ' + (bank.difference === null ? 'pending' : bank.difference === 0 ? 'matched' : 'mismatch');
             result.innerText = bank.difference === null ? 'Chưa nhập số tiền trên sao kê' :
@@ -1154,6 +1222,136 @@
         });
 
         document.getElementById('billModal').style.display = 'flex';
+    }
+
+    function nextBankGroupId(dateKey) {
+        const prefix = `GD-${String(dateKey || '').replace(/\D/g, '') || 'KHAC'}-`;
+        const numbers = Object.keys(bankTransactionGroups).filter(id => id.startsWith(prefix))
+            .map(id => Number(id.slice(prefix.length))).filter(Number.isFinite);
+        return prefix + String((numbers.length ? Math.max(...numbers) : 0) + 1).padStart(3, '0');
+    }
+
+    function openLinkBillsModal() {
+        if (!window.canEditInvoices?.()) return alert('Bạn cần quyền admin để liên kết giao dịch.');
+        const bill = activeBillId && billStore[activeBillId];
+        if (!bill || getTransferAmount(bill) <= 0) return;
+        const currentGroup = getBankGroupForBill(bill);
+        pendingLinkSelection = new Set(currentGroup?.billIds || [bill.maHD]);
+        pendingLinkSelection.add(bill.maHD);
+        document.getElementById('linkBillsDate').innerText = `Ngày ${bill.ngay} · Bill gốc ${bill.maHD}`;
+        const candidates = Object.values(billStore)
+            .filter(item => item.ngay === bill.ngay && item.maHD !== bill.maHD && getTransferAmount(item) > 0)
+            .sort((a, b) => getBillTimestamp(b) - getBillTimestamp(a));
+        document.getElementById('linkBillsOptions').innerHTML = candidates.length ? candidates.map(item => {
+            const otherGroup = item.bankGroupId && item.bankGroupId !== currentGroup?.id ? bankTransactionGroups[item.bankGroupId] : null;
+            const checked = pendingLinkSelection.has(item.maHD);
+            return `<label class="link-bill-option${otherGroup ? ' disabled' : ''}"><input type="checkbox" ${checked ? 'checked' : ''} ${otherGroup ? 'disabled' : ''} onchange="toggleBillLink('${escapeJsString(item.maHD)}', this.checked)"><span><b>${escapeHtml(item.maHD)}</b><small>${escapeHtml(formatBillTime(item))} · ${escapeHtml(item.tenKH || 'Khách lẻ')}${otherGroup ? ` · Đã thuộc ${escapeHtml(otherGroup.id)}` : ''}</small></span><strong>${formatVND(getTransferAmount(item))}</strong></label>`;
+        }).join('') : '<div class="empty-link-bills">Không có bill chuyển khoản khác trong ngày này.</div>';
+        updateLinkBillsTotal();
+        document.getElementById('linkBillsModal').style.display = 'flex';
+    }
+
+    function toggleBillLink(maHD, checked) {
+        if (checked) pendingLinkSelection.add(maHD);
+        else pendingLinkSelection.delete(maHD);
+        updateLinkBillsTotal();
+    }
+
+    function updateLinkBillsTotal() {
+        const total = [...pendingLinkSelection].reduce((sum, id) => sum + getTransferAmount(billStore[id] || {}), 0);
+        document.getElementById('linkBillsTotal').innerText = formatVND(total);
+    }
+
+    function closeLinkBillsModal() {
+        document.getElementById('linkBillsModal').style.display = 'none';
+        pendingLinkSelection = new Set();
+    }
+
+    async function saveBillLinks() {
+        if (!window.canEditInvoices?.()) return alert('Bạn cần quyền admin để liên kết giao dịch.');
+        const activeBill = activeBillId && billStore[activeBillId];
+        if (!activeBill) return;
+        pendingLinkSelection.add(activeBill.maHD);
+        const billIds = [...pendingLinkSelection].filter(id => billStore[id] && billStore[id].ngay === activeBill.ngay && getTransferAmount(billStore[id]) > 0);
+        if (billIds.length < 2) return alert('Hãy chọn ít nhất một bill khác trong cùng ngày.');
+        if (billIds.some(id => billStore[id].bankGroupId && billStore[id].bankGroupId !== activeBill.bankGroupId)) {
+            return alert('Có bill đã thuộc giao dịch khác. Hãy gỡ liên kết cũ trước.');
+        }
+        const currentGroup = getBankGroupForBill(activeBill);
+        const individualReceived = billIds.map(id => billStore[id].bankReceived).filter(value => value != null && value !== '').map(Number);
+        const receivedValues = [...new Set([...(currentGroup?.bankReceived == null ? [] : [Number(currentGroup.bankReceived)]), ...individualReceived])];
+        if (receivedValues.length > 1) return alert('Các bill đang có số tiền thực nhận khác nhau. Hãy xóa đối soát riêng trước khi liên kết.');
+        if (!confirm(`Liên kết ${billIds.length} bill vào một giao dịch ngân hàng, tổng ${formatVND(billIds.reduce((sum, id) => sum + getTransferAmount(billStore[id]), 0))}?`)) return;
+
+        const previousBills = structuredClone(billStore);
+        const previousGroups = structuredClone(bankTransactionGroups);
+        const id = currentGroup?.id || nextBankGroupId(activeBill.ngay);
+        const previousMemberIds = currentGroup?.billIds || [];
+        previousMemberIds.filter(memberId => !billIds.includes(memberId)).forEach(memberId => {
+            if (billStore[memberId]) delete billStore[memberId].bankGroupId;
+        });
+        const legacyTips = billIds.reduce((sum, memberId) => sum + (Number(billStore[memberId].tipChuyenKhoan) || 0), 0);
+        const references = [...new Set([currentGroup?.bankReference, ...billIds.map(memberId => billStore[memberId].bankReference)].filter(Boolean))];
+        bankTransactionGroups[id] = {
+            id,
+            date: activeBill.ngay,
+            billIds,
+            tipChuyenKhoan: (Number(currentGroup?.tipChuyenKhoan) || 0) + legacyTips,
+            bankReceived: receivedValues.length ? receivedValues[0] : null,
+            bankReference: references.join(' | '),
+            createdAt: currentGroup?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            updatedBy: currentUser || 'Admin'
+        };
+        billIds.forEach(memberId => {
+            const member = billStore[memberId];
+            member.bankGroupId = id;
+            member.tipChuyenKhoan = 0;
+            member.bankReceived = null;
+            member.bankReference = '';
+        });
+        if (!await saveToLocalStorage()) {
+            billStore = previousBills;
+            bankTransactionGroups = previousGroups;
+            return alert('Không lưu được liên kết. Dữ liệu chưa thay đổi.');
+        }
+        markLocalDirty();
+        closeLinkBillsModal();
+        renderDashboard();
+        openBillModal(activeBillId);
+    }
+
+    async function unlinkActiveBill() {
+        if (!window.canEditInvoices?.()) return alert('Bạn cần quyền admin để gỡ liên kết.');
+        const bill = activeBillId && billStore[activeBillId];
+        const group = getBankGroupForBill(bill);
+        if (!bill || !group) return;
+        if (!confirm(`Gỡ bill ${bill.maHD} khỏi ${group.id}?`)) return;
+        const previousBills = structuredClone(billStore);
+        const previousGroups = structuredClone(bankTransactionGroups);
+        delete bill.bankGroupId;
+        const remaining = group.billIds.filter(id => id !== bill.maHD && billStore[id]);
+        if (remaining.length >= 2) {
+            group.billIds = remaining;
+            group.updatedAt = new Date().toISOString();
+        } else {
+            const lastBill = remaining.length ? billStore[remaining[0]] : null;
+            if (lastBill) {
+                delete lastBill.bankGroupId;
+                lastBill.tipChuyenKhoan = Number(group.tipChuyenKhoan) || 0;
+                lastBill.bankReceived = group.bankReceived ?? null;
+                lastBill.bankReference = group.bankReference || '';
+            }
+            delete bankTransactionGroups[group.id];
+        }
+        if (!await saveToLocalStorage()) {
+            billStore = previousBills;
+            bankTransactionGroups = previousGroups;
+            return alert('Không lưu được thao tác gỡ liên kết.');
+        }
+        markLocalDirty();
+        renderDashboard();
+        openBillModal(activeBillId);
     }
 
     function closeModal() {
@@ -1197,6 +1395,7 @@
         if (!bill) return;
         const method = document.getElementById('paymentMethodCorrection').value;
         const reason = document.getElementById('paymentCorrectionReason').value.trim();
+        if (bill.bankGroupId && method !== 'Chuyển khoản') return alert('Bill đang thuộc một giao dịch liên kết. Hãy gỡ bill khỏi giao dịch trước khi chuyển sang tiền mặt.');
         if (!reason) return alert('Vui lòng nhập lý do điều chỉnh để có thể kiểm tra lại sau này.');
         if (method === bill.paymentSummary && !bill.paymentCorrection) return alert('Phương thức được chọn đang giống dữ liệu hiện tại.');
         if (!confirm(`Điều chỉnh bill ${bill.maHD} thành ${method}? Số liệu tổng quan sẽ được tính lại.`)) return;
@@ -1250,16 +1449,22 @@
             return;
         }
 
-        const previousTip = bill.tipChuyenKhoan;
-        const previousReceived = bill.bankReceived;
-        const previousReference = bill.bankReference;
-        bill.tipChuyenKhoan = tip;
-        bill.bankReceived = received;
-        bill.bankReference = reference;
+        const group = getBankGroupForBill(bill);
+        const target = group || bill;
+        const previousTip = target.tipChuyenKhoan;
+        const previousReceived = target.bankReceived;
+        const previousReference = target.bankReference;
+        target.tipChuyenKhoan = tip;
+        target.bankReceived = received;
+        target.bankReference = reference;
+        if (group) {
+            group.updatedAt = new Date().toISOString();
+            group.updatedBy = currentUser || 'Admin';
+        }
         if (!await saveToLocalStorage()) {
-            bill.tipChuyenKhoan = previousTip;
-            bill.bankReceived = previousReceived;
-            bill.bankReference = previousReference;
+            target.tipChuyenKhoan = previousTip;
+            target.bankReceived = previousReceived;
+            target.bankReference = previousReference;
             alert('Không lưu được đối soát vào trình duyệt. Vui lòng kiểm tra dung lượng lưu trữ.');
             return;
         }
@@ -1278,6 +1483,7 @@
         if (confirm(`Bạn có chắc chắn muốn xóa toàn bộ dữ liệu ngày ${selectedDate}?`)) {
             const previousBills = { ...billStore };
             const previousRaw = rawStore;
+            const previousGroups = structuredClone(bankTransactionGroups);
             Object.keys(billStore).forEach(maHD => {
                 if (billStore[maHD].ngay === selectedDate) {
                     delete billStore[maHD];
@@ -1285,10 +1491,25 @@
             });
 
             rawStore = rawStore.filter(r => parseKiotVietDate(r['Thời gian'] || r['Ngày tạo']) !== selectedDate);
+            Object.keys(bankTransactionGroups).forEach(groupId => {
+                const group = bankTransactionGroups[groupId];
+                group.billIds = group.billIds.filter(id => billStore[id]);
+                if (group.billIds.length < 2) {
+                    const lastBill = group.billIds.length ? billStore[group.billIds[0]] : null;
+                    if (lastBill) {
+                        delete lastBill.bankGroupId;
+                        lastBill.tipChuyenKhoan = Number(group.tipChuyenKhoan) || 0;
+                        lastBill.bankReceived = group.bankReceived ?? null;
+                        lastBill.bankReference = group.bankReference || '';
+                    }
+                    delete bankTransactionGroups[groupId];
+                }
+            });
 
             if (!await saveToLocalStorage()) {
                 billStore = previousBills;
                 rawStore = previousRaw;
+                bankTransactionGroups = previousGroups;
                 alert('Không lưu được thao tác xóa. Dữ liệu chưa bị thay đổi.');
             } else markLocalDirty();
             updateDateDropdown();
@@ -1433,12 +1654,14 @@
                     return;
                 }
                 const files = content.importedFiles || [];
-                if (!await saveToLocalStorage(content.billStore, content.rawStore, files)) {
+                const groups = content.bankTransactionGroups || {};
+                if (!await saveToLocalStorage(content.billStore, content.rawStore, files, activePassphrase, groups)) {
                     throw new Error('Bộ nhớ trình duyệt đã đầy hoặc bị chặn. Dữ liệu trên máy chưa bị thay đổi.');
                 }
                 billStore = content.billStore;
                 rawStore = content.rawStore;
                 importedFiles = files;
+                bankTransactionGroups = groups;
                 setSyncClean(id, data.updated_at);
                 if (window.markSupabaseImported) window.markSupabaseImported();
 
@@ -1494,6 +1717,10 @@
 
     function escapeHtml(str) {
         return String(str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function escapeJsString(str) {
+        return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/[\r\n]/g, ' ');
     }
 </script>
 <script src="supabase-sync.js"></script>
