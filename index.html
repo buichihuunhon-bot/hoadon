@@ -342,7 +342,8 @@
                 <button type="button" class="btn btn-sm" onclick="saveBankReconciliation()">Lưu đối soát</button>
             </div>
             <div class="form-group bank-reference" id="bankReference" style="display: none;"><label for="bankReferenceInput">Mã giao dịch / nội dung chuyển khoản</label><input type="text" id="bankReferenceInput" maxlength="120" placeholder="Ghi để tra cứu trên sao kê"></div>
-            <div id="bankReadOnly" class="bank-readonly" style="display: none;"><div><span>Thực nhận trên sao kê</span><strong id="mBankReceivedReadOnly">Chưa đối soát</strong></div><div><span>Mã giao dịch / nội dung chuyển khoản</span><strong id="mBankReferenceReadOnly">—</strong></div></div>
+            <div class="form-group bank-reconciliation-note" id="bankReconciliationNote" style="display: none;"><label for="bankReconciliationNoteInput">Ghi chú đối soát</label><textarea id="bankReconciliationNoteInput" maxlength="300" rows="3" placeholder="Ví dụ: Tip 200.000đ chuyển riêng, mã GD FT26229336853098; hoặc khách chuyển 2 lần mới đủ tiền."></textarea><small>Ghi chú chỉ để giải thích giao dịch, không làm thay đổi số tiền đối soát.</small></div>
+            <div id="bankReadOnly" class="bank-readonly" style="display: none;"><div><span>Thực nhận trên sao kê</span><strong id="mBankReceivedReadOnly">Chưa đối soát</strong></div><div><span>Mã giao dịch / nội dung chuyển khoản</span><strong id="mBankReferenceReadOnly">—</strong></div><div class="bank-readonly-note"><span>Ghi chú đối soát</span><strong id="mBankReconciliationNoteReadOnly">—</strong></div></div>
             <div id="mBankDifference" class="bank-result"></div>
             <p class="bank-save-note" id="bankSaveNote">Dấu chấm phân cách hàng nghìn được thêm tự động. Thay đổi sẽ tự đồng bộ lên Cloud.</p>
         </div>
@@ -999,6 +1000,18 @@
         return getGroupBills(group).sort((a, b) => getBillTimestamp(b) - getBillTimestamp(a) || a.maHD.localeCompare(b.maHD, 'vi', { numeric: true }))[0]?.maHD || null;
     }
 
+    function formatElectronicInvoiceReference(bill) {
+        const value = String(bill?.soHDDT || '').trim();
+        if (!value) return String(bill?.maHD || 'khác');
+        if (!/^\d+$/.test(value)) return value;
+        return value.replace(/^0+(?=\d)/, '').padStart(3, '0');
+    }
+
+    function getReconciliationNote(bill) {
+        const group = getBankGroupForBill(bill);
+        return String(group ? group.reconciliationNote || '' : bill?.reconciliationNote || '').trim();
+    }
+
     function getBankReconciliation(bill) {
         const group = getBankGroupForBill(bill);
         const transfer = group ? getGroupBills(group).reduce((sum, item) => sum + getTransferAmount(item), 0) : getTransferAmount(bill);
@@ -1056,7 +1069,8 @@
                 b.maHD.toLowerCase().includes(searchInput) || 
                 b.tenKH.toLowerCase().includes(searchInput) || 
                 b.sdt.includes(searchInput) ||
-                b.soHDDT.toLowerCase().includes(searchInput));
+                b.soHDDT.toLowerCase().includes(searchInput) ||
+                getReconciliationNote(b).toLowerCase().includes(searchInput));
         const matchedGroups = new Set(directlyMatched.map(b => b.bankGroupId).filter(Boolean));
         const bills = sortBillsForDashboard(dateBills.filter(b => directlyMatched.includes(b) || matchedGroups.has(b.bankGroupId)));
 
@@ -1114,11 +1128,14 @@
             const isGroupLeader = !bank.group || getGroupLeaderId(bank.group) === b.maHD;
             const tipBadge = bank.tip > 0 && isGroupLeader ? `<span class="tip-badge">TIP +${formatVND(bank.tip)}</span>` : '';
             const correctionBadge = b.paymentCorrection ? '<span class="correction-badge">ĐÃ SỬA</span>' : '';
-            const groupBadge = bank.group ? `<span class="transaction-group-badge">${escapeHtml(bank.group.id)} · ${bank.group.billIds.length} bill</span>` : '';
+            const groupBadge = bank.group && isGroupLeader ? `<span class="transaction-group-badge">GD-${bank.group.billIds.length} bill</span>` : '';
+            const leaderBill = bank.group ? billStore[getGroupLeaderId(bank.group)] : null;
             const bankNote = bank.group && !isGroupLeader
-                ? `<span class="bill-bank-note group-member-note">Cùng giao dịch ${escapeHtml(bank.group.id)}</span>`
+                ? `<span class="bill-bank-note group-member-note">Chung hóa đơn ${escapeHtml(formatElectronicInvoiceReference(leaderBill))}</span>`
                 : renderBankNote(bank);
-            const td5 = `<td><div class="payment-cell-title">${escapeHtml(b.paymentSummary)}${tipBadge}${correctionBadge}${groupBadge}</div>${bankNote}</td>`;
+            const reconciliationNote = isGroupLeader ? getReconciliationNote(b) : '';
+            const noteHtml = reconciliationNote ? `<span class="bill-reconciliation-note">Ghi chú: ${escapeHtml(reconciliationNote)}</span>` : '';
+            const td5 = `<td><div class="payment-cell-title">${escapeHtml(b.paymentSummary)}${tipBadge}${correctionBadge}${groupBadge}</div>${bankNote}${noteHtml}</td>`;
             const td6 = '<td style="text-align: center;"><button class="btn-detail" type="button">Xem chi tiết bill</button></td>';
 
             tr.innerHTML = td1 + td2 + td3 + td4 + td5 + td6;
@@ -1189,9 +1206,12 @@
             document.getElementById('tipInput').value = bank.tip ? formatVndInputValue(bank.tip) : '';
             document.getElementById('bankReceivedInput').value = bank.received === null ? '' : formatVndInputValue(bank.received);
             const bankReference = group ? group.bankReference : b.bankReference;
+            const reconciliationNote = getReconciliationNote(b);
             document.getElementById('bankReferenceInput').value = bankReference || '';
+            document.getElementById('bankReconciliationNoteInput').value = reconciliationNote;
             document.getElementById('mBankReceivedReadOnly').innerText = bank.received === null ? 'Chưa đối soát' : formatVND(bank.received);
             document.getElementById('mBankReferenceReadOnly').innerText = bankReference || '—';
+            document.getElementById('mBankReconciliationNoteReadOnly').innerText = reconciliationNote || '—';
             const result = document.getElementById('mBankDifference');
             result.className = 'bank-result ' + (bank.difference === null ? 'pending' : bank.difference === 0 ? 'matched' : 'mismatch');
             result.innerText = bank.difference === null ? 'Chưa nhập số tiền trên sao kê' :
@@ -1292,6 +1312,7 @@
         });
         const legacyTips = billIds.reduce((sum, memberId) => sum + (Number(billStore[memberId].tipChuyenKhoan) || 0), 0);
         const references = [...new Set([currentGroup?.bankReference, ...billIds.map(memberId => billStore[memberId].bankReference)].filter(Boolean))];
+        const notes = [...new Set([currentGroup?.reconciliationNote, ...billIds.map(memberId => billStore[memberId].reconciliationNote)].map(value => String(value || '').trim()).filter(Boolean))];
         bankTransactionGroups[id] = {
             id,
             date: activeBill.ngay,
@@ -1299,6 +1320,7 @@
             tipChuyenKhoan: (Number(currentGroup?.tipChuyenKhoan) || 0) + legacyTips,
             bankReceived: receivedValues.length ? receivedValues[0] : null,
             bankReference: references.join(' | '),
+            reconciliationNote: notes.join(' | '),
             createdAt: currentGroup?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             updatedBy: currentUser || 'Admin'
@@ -1309,6 +1331,7 @@
             member.tipChuyenKhoan = 0;
             member.bankReceived = null;
             member.bankReference = '';
+            member.reconciliationNote = '';
         });
         if (!await saveToLocalStorage()) {
             billStore = previousBills;
@@ -1341,6 +1364,7 @@
                 lastBill.tipChuyenKhoan = Number(group.tipChuyenKhoan) || 0;
                 lastBill.bankReceived = group.bankReceived ?? null;
                 lastBill.bankReference = group.bankReference || '';
+                lastBill.reconciliationNote = group.reconciliationNote || '';
             }
             delete bankTransactionGroups[group.id];
         }
@@ -1367,7 +1391,8 @@
             valChuyenKhoan: Number(bill.valChuyenKhoan) || 0,
             tipChuyenKhoan: bill.tipChuyenKhoan ?? null,
             bankReceived: bill.bankReceived ?? null,
-            bankReference: bill.bankReference ?? ''
+            bankReference: bill.bankReference ?? '',
+            reconciliationNote: bill.reconciliationNote ?? ''
         };
     }
 
@@ -1387,6 +1412,7 @@
         bill.tipChuyenKhoan = 0;
         bill.bankReceived = null;
         bill.bankReference = '';
+        bill.reconciliationNote = '';
     }
 
     async function savePaymentCorrection() {
@@ -1444,6 +1470,7 @@
         const tip = parseVndInput(document.getElementById('tipInput').value || '0');
         const received = parseVndInput(document.getElementById('bankReceivedInput').value, true);
         const reference = document.getElementById('bankReferenceInput').value.trim();
+        const reconciliationNote = document.getElementById('bankReconciliationNoteInput').value.trim();
         if (!Number.isSafeInteger(tip) || (received !== null && !Number.isSafeInteger(received))) {
             alert('Vui lòng nhập số tiền không âm, không có phần thập phân. Có thể dùng dấu chấm hoặc dấu phẩy để tách hàng nghìn.');
             return;
@@ -1454,9 +1481,11 @@
         const previousTip = target.tipChuyenKhoan;
         const previousReceived = target.bankReceived;
         const previousReference = target.bankReference;
+        const previousNote = target.reconciliationNote;
         target.tipChuyenKhoan = tip;
         target.bankReceived = received;
         target.bankReference = reference;
+        target.reconciliationNote = reconciliationNote;
         if (group) {
             group.updatedAt = new Date().toISOString();
             group.updatedBy = currentUser || 'Admin';
@@ -1465,6 +1494,7 @@
             target.tipChuyenKhoan = previousTip;
             target.bankReceived = previousReceived;
             target.bankReference = previousReference;
+            target.reconciliationNote = previousNote;
             alert('Không lưu được đối soát vào trình duyệt. Vui lòng kiểm tra dung lượng lưu trữ.');
             return;
         }
@@ -1501,6 +1531,7 @@
                         lastBill.tipChuyenKhoan = Number(group.tipChuyenKhoan) || 0;
                         lastBill.bankReceived = group.bankReceived ?? null;
                         lastBill.bankReference = group.bankReference || '';
+                        lastBill.reconciliationNote = group.reconciliationNote || '';
                     }
                     delete bankTransactionGroups[groupId];
                 }
