@@ -192,6 +192,7 @@ td b { color: #243653; }
 .bill-time { display: block; margin-top: 3px; color: #8898ac; font-size: 11px; white-space: nowrap; }
 .payment-cell-title { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 7px; }
 .tip-badge { display: inline-block; padding: 3px 7px; border: 1px solid #f2d291; border-radius: 6px; background: #fff3d8; color: #8c5606; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.correction-badge { display: inline-block; padding: 3px 7px; border: 1px solid #c9d9ef; border-radius: 6px; background: #f0f5fb; color: #526f96; font-size: 9px; font-weight: 800; white-space: nowrap; }
 .bill-bank-note { display: block; margin-top: 4px; color: #7087a4; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
 .bill-bank-note.has-tip { width: fit-content; padding: 4px 6px; border-radius: 6px; background: #eaf3ff; color: #315f9d; font-weight: 600; }
 .bill-bank-note.has-tip b { color: #1e5eb6; font-weight: 800; }
@@ -256,6 +257,11 @@ td b { color: #243653; }
 .payment-method { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 13px; color: #718199; font-size: 11px; }
 .payment-method strong { color: #28476e; font-size: 12px; }
 .payment-method small { flex-basis: 100%; color: #78889d; font-size: 11px; }
+.payment-correction-status { margin-top: 12px; padding: 9px 11px; border: 1px solid #cdddf1; border-radius: 8px; background: #f2f7fd; color: #49698f; font-size: 11px; }
+.payment-correction-editor { grid-template-columns: minmax(130px, .7fr) minmax(220px, 1.5fr) auto auto; gap: 10px; align-items: end; margin-top: 13px; padding-top: 13px; border-top: 1px solid #e3eaf5; }
+.payment-correction-editor .form-group { min-width: 0; margin: 0; }
+.payment-correction-editor select, .payment-correction-editor input { width: 100%; min-width: 0; }
+.payment-correction-editor button { white-space: nowrap; }
 .bank-breakdown { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .bank-breakdown > div { padding: 10px 12px; border-radius: 8px; background: #f4f7fb; }
 .bank-breakdown span, .bank-breakdown strong { display: block; }
@@ -314,6 +320,7 @@ td b { color: #243653; }
     .cloud-login { grid-template-columns: 1fr; }
     .config-grid .btn { width: 100%; }
     .bank-inputs { grid-template-columns: 1fr 1fr; }
+    .payment-correction-editor { grid-template-columns: 1fr 1fr; }
     .bank-inputs .btn { grid-column: 1 / -1; }
     .grid-3 { grid-template-columns: 1fr 1fr; }
     .modal-content { padding: 18px; }
@@ -334,6 +341,7 @@ td b { color: #243653; }
     .bank-breakdown > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .bank-breakdown strong { margin-top: 0; text-align: right; }
     .bank-inputs { grid-template-columns: 1fr; }
+    .payment-correction-editor { grid-template-columns: 1fr; }
     .bank-inputs .btn { grid-column: auto; }
     .amount-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; }
     .amount-item strong { margin-top: 0; text-align: right; }
