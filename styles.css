@@ -204,8 +204,8 @@ td b { color: #243653; }
 .bill-bank-note.group-member-note { color: #477463; font-weight: 700; }
 .bill-reconciliation-note { display: block; max-width: 360px; margin-top: 5px; color: #7a6850; font-size: 10px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
 .transaction-group-row td:first-child { border-left: 3px solid #54a98c; }
-.transaction-group-row.group-leader td { background: #fbfefd; }
-.transaction-group-row.group-member td { background: #f7fcfa; }
+.transaction-group-row.group-leader td { background: #ffeeee; }
+.transaction-group-row.group-member td { background: #ffeeee; }
 .num { color: #1f3555; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .badge-conflict { border-radius: 6px; padding: 3px 7px; font-size: 10px; }
 .btn-detail { padding: 7px 10px; border: 1px solid #cfe0fa; background: #eff5ff; color: #2768d9; white-space: nowrap; }
