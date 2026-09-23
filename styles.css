@@ -204,8 +204,8 @@ td b { color: #243653; }
 .bill-bank-note.group-member-note { color: #477463; font-weight: 700; }
 .bill-reconciliation-note { display: block; max-width: 360px; margin-top: 5px; color: #7a6850; font-size: 10px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
 .transaction-group-row td:first-child { border-left: 3px solid #54a98c; }
-.transaction-group-row.group-leader td { background: #ffeeee; }
-.transaction-group-row.group-member td { background: #ffeeee; }
+.transaction-group-row.group-leader td { background: #fbfefd; }
+.transaction-group-row.group-member td { background: #f7fcfa; }
 .num { color: #1f3555; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .badge-conflict { border-radius: 6px; padding: 3px 7px; font-size: 10px; }
 .btn-detail { padding: 7px 10px; border: 1px solid #cfe0fa; background: #eff5ff; color: #2768d9; white-space: nowrap; }
@@ -264,10 +264,12 @@ td b { color: #243653; }
 .payment-method strong { color: #28476e; font-size: 12px; }
 .payment-method small { flex-basis: 100%; color: #78889d; font-size: 11px; }
 .payment-correction-status { margin-top: 12px; padding: 9px 11px; border: 1px solid #cdddf1; border-radius: 8px; background: #f2f7fd; color: #49698f; font-size: 11px; }
-.payment-correction-editor { grid-template-columns: minmax(130px, .7fr) minmax(220px, 1.5fr) auto auto; gap: 10px; align-items: end; margin-top: 13px; padding-top: 13px; border-top: 1px solid #e3eaf5; }
+.payment-correction-editor { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: end; margin-top: 13px; padding-top: 13px; border-top: 1px solid #e3eaf5; }
 .payment-correction-editor .form-group { min-width: 0; margin: 0; }
 .payment-correction-editor select, .payment-correction-editor input { width: 100%; min-width: 0; }
 .payment-correction-editor button { white-space: nowrap; }
+.payment-correction-reason, .payment-correction-actions { grid-column: 1 / -1; }
+.payment-correction-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .bank-breakdown { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .link-transaction-button { margin-bottom: 12px; }
 .transaction-group-panel { margin-bottom: 13px; padding: 12px; border: 1px solid #cfe5dd; border-radius: 10px; background: #f5fbf9; }
