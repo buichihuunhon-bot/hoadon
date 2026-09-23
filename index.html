@@ -315,6 +315,13 @@
                 <div class="amount-item"><span>Còn nợ</span><strong id="mConNo">--</strong></div>
             </div>
             <div class="payment-method"><span>Phương thức</span><strong id="mHinhThucTT">--</strong><small id="mChiTietPhuongThucTT"></small></div>
+            <div id="paymentCorrectionStatus" class="payment-correction-status" style="display: none;"></div>
+            <div id="paymentCorrectionEditor" class="payment-correction-editor" style="display: none;">
+                <div class="form-group"><label for="paymentMethodCorrection">Điều chỉnh phương thức</label><select id="paymentMethodCorrection"><option value="Tiền mặt">Tiền mặt</option><option value="Chuyển khoản">Chuyển khoản</option></select></div>
+                <div class="form-group"><label for="paymentCorrectionReason">Lý do điều chỉnh</label><input type="text" id="paymentCorrectionReason" maxlength="160" placeholder="Ví dụ: KiotViet ghi nhầm phương thức"></div>
+                <button type="button" class="btn btn-sm" onclick="savePaymentCorrection()">Lưu điều chỉnh</button>
+                <button type="button" id="undoPaymentCorrectionButton" class="btn-secondary btn-sm" style="display: none;" onclick="undoPaymentCorrection()">Hoàn tác về dữ liệu gốc</button>
+            </div>
         </div>
 
         <div class="bill-section bank-reconcile" id="bankReconcileSection" style="display: none;">
@@ -1055,8 +1062,9 @@
             const td4 = `<td>${escapeHtml(b.soHDDT || '-')}</td>`;
             const bank = getBankReconciliation(b);
             const tipBadge = bank.tip > 0 ? `<span class="tip-badge">TIP +${formatVND(bank.tip)}</span>` : '';
+            const correctionBadge = b.paymentCorrection ? '<span class="correction-badge">ĐÃ SỬA</span>' : '';
             const bankNote = renderBankNote(bank);
-            const td5 = `<td><div class="payment-cell-title">${escapeHtml(b.paymentSummary)}${tipBadge}</div>${bankNote}</td>`;
+            const td5 = `<td><div class="payment-cell-title">${escapeHtml(b.paymentSummary)}${tipBadge}${correctionBadge}</div>${bankNote}</td>`;
             const td6 = '<td style="text-align: center;"><button class="btn-detail" type="button">Xem chi tiết bill</button></td>';
 
             tr.innerHTML = td1 + td2 + td3 + td4 + td5 + td6;
@@ -1093,6 +1101,16 @@
         document.getElementById('mConNo').innerText = formatVND(b.conNo);
         document.getElementById('mHinhThucTT').innerText = b.paymentSummary || '-';
         document.getElementById('mChiTietPhuongThucTT').innerText = b.paymentDetails || 'Chưa ghi nhận';
+
+        const correction = b.paymentCorrection;
+        const correctionStatus = document.getElementById('paymentCorrectionStatus');
+        correctionStatus.style.display = correction ? 'block' : 'none';
+        correctionStatus.innerText = correction
+            ? `Đã điều chỉnh từ ${correction.original.paymentSummary || 'Khác'} sang ${b.paymentSummary} · ${correction.reason} · ${new Date(correction.correctedAt).toLocaleString('vi-VN')}`
+            : '';
+        document.getElementById('paymentMethodCorrection').value = b.paymentSummary === 'Tiền mặt' ? 'Tiền mặt' : 'Chuyển khoản';
+        document.getElementById('paymentCorrectionReason').value = correction?.reason || '';
+        document.getElementById('undoPaymentCorrectionButton').style.display = correction ? '' : 'none';
 
         const bank = getBankReconciliation(b);
         const bankSection = document.getElementById('bankReconcileSection');
@@ -1141,6 +1159,82 @@
     function closeModal() {
         document.getElementById('billModal').style.display = 'none';
         activeBillId = null;
+    }
+
+    function captureOriginalPayment(bill) {
+        return {
+            paymentSummary: bill.paymentSummary,
+            paymentDetails: bill.paymentDetails,
+            valTienMat: Number(bill.valTienMat) || 0,
+            valChuyenKhoan: Number(bill.valChuyenKhoan) || 0,
+            tipChuyenKhoan: bill.tipChuyenKhoan ?? null,
+            bankReceived: bill.bankReceived ?? null,
+            bankReference: bill.bankReference ?? ''
+        };
+    }
+
+    function applyPaymentMethod(bill, method) {
+        const amount = Number(bill.khachDaTra) || 0;
+        if (method === 'Tiền mặt') {
+            bill.valTienMat = amount;
+            bill.valChuyenKhoan = 0;
+            bill.paymentSummary = 'Tiền mặt';
+            bill.paymentDetails = `Tiền mặt: ${formatVND(amount)}`;
+        } else {
+            bill.valTienMat = 0;
+            bill.valChuyenKhoan = amount;
+            bill.paymentSummary = 'Chuyển khoản';
+            bill.paymentDetails = `Chuyển khoản: ${formatVND(amount)}`;
+        }
+        bill.tipChuyenKhoan = 0;
+        bill.bankReceived = null;
+        bill.bankReference = '';
+    }
+
+    async function savePaymentCorrection() {
+        if (!window.canEditInvoices?.()) return alert('Bạn cần quyền admin để điều chỉnh phương thức thanh toán.');
+        const bill = activeBillId && billStore[activeBillId];
+        if (!bill) return;
+        const method = document.getElementById('paymentMethodCorrection').value;
+        const reason = document.getElementById('paymentCorrectionReason').value.trim();
+        if (!reason) return alert('Vui lòng nhập lý do điều chỉnh để có thể kiểm tra lại sau này.');
+        if (method === bill.paymentSummary && !bill.paymentCorrection) return alert('Phương thức được chọn đang giống dữ liệu hiện tại.');
+        if (!confirm(`Điều chỉnh bill ${bill.maHD} thành ${method}? Số liệu tổng quan sẽ được tính lại.`)) return;
+
+        const before = structuredClone(bill);
+        const original = bill.paymentCorrection?.original || captureOriginalPayment(bill);
+        applyPaymentMethod(bill, method);
+        bill.paymentCorrection = {
+            original,
+            reason,
+            correctedAt: new Date().toISOString(),
+            correctedBy: currentUser || 'Admin'
+        };
+        if (!await saveToLocalStorage()) {
+            billStore[activeBillId] = before;
+            return alert('Không lưu được điều chỉnh. Dữ liệu chưa thay đổi.');
+        }
+        markLocalDirty();
+        renderDashboard();
+        openBillModal(activeBillId);
+    }
+
+    async function undoPaymentCorrection() {
+        if (!window.canEditInvoices?.()) return alert('Bạn cần quyền admin để hoàn tác điều chỉnh.');
+        const bill = activeBillId && billStore[activeBillId];
+        const original = bill?.paymentCorrection?.original;
+        if (!bill || !original) return;
+        if (!confirm(`Hoàn tác phương thức thanh toán của bill ${bill.maHD} về dữ liệu gốc?`)) return;
+        const before = structuredClone(bill);
+        Object.assign(bill, original);
+        delete bill.paymentCorrection;
+        if (!await saveToLocalStorage()) {
+            billStore[activeBillId] = before;
+            return alert('Không lưu được thao tác hoàn tác. Dữ liệu chưa thay đổi.');
+        }
+        markLocalDirty();
+        renderDashboard();
+        openBillModal(activeBillId);
     }
 
     async function saveBankReconciliation() {
