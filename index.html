@@ -318,9 +318,9 @@
             <div id="paymentCorrectionStatus" class="payment-correction-status" style="display: none;"></div>
             <div id="paymentCorrectionEditor" class="payment-correction-editor" style="display: none;">
                 <div class="form-group"><label for="paymentMethodCorrection">Điều chỉnh phương thức</label><select id="paymentMethodCorrection"><option value="Tiền mặt">Tiền mặt</option><option value="Chuyển khoản">Chuyển khoản</option></select></div>
-                <div class="form-group"><label for="paymentCorrectionReason">Lý do điều chỉnh</label><input type="text" id="paymentCorrectionReason" maxlength="160" placeholder="Ví dụ: KiotViet ghi nhầm phương thức"></div>
-                <button type="button" class="btn btn-sm" onclick="savePaymentCorrection()">Lưu điều chỉnh</button>
-                <button type="button" id="undoPaymentCorrectionButton" class="btn-secondary btn-sm" style="display: none;" onclick="undoPaymentCorrection()">Hoàn tác về dữ liệu gốc</button>
+                <div class="form-group"><label for="paidAmountCorrection">Khách đã trả (đ)</label><input type="text" inputmode="numeric" id="paidAmountCorrection" placeholder="0" oninput="formatMoneyInput(this)"></div>
+                <div class="form-group payment-correction-reason"><label for="paymentCorrectionReason">Lý do điều chỉnh</label><input type="text" id="paymentCorrectionReason" maxlength="160" placeholder="Ví dụ: Số tiền trong file KiotViet bị sai"></div>
+                <div class="payment-correction-actions"><button type="button" class="btn btn-sm" onclick="savePaymentCorrection()">Lưu điều chỉnh</button><button type="button" id="undoPaymentCorrectionButton" class="btn-secondary btn-sm" style="display: none;" onclick="undoPaymentCorrection()">Hoàn tác về dữ liệu gốc</button></div>
             </div>
         </div>
 
@@ -1177,10 +1177,14 @@
         const correction = b.paymentCorrection;
         const correctionStatus = document.getElementById('paymentCorrectionStatus');
         correctionStatus.style.display = correction ? 'block' : 'none';
-        correctionStatus.innerText = correction
-            ? `Đã điều chỉnh từ ${correction.original.paymentSummary || 'Khác'} sang ${b.paymentSummary} · ${correction.reason} · ${new Date(correction.correctedAt).toLocaleString('vi-VN')}`
-            : '';
+        if (correction) {
+            const changes = [];
+            if (correction.original.paymentSummary !== b.paymentSummary) changes.push(`${correction.original.paymentSummary || 'Khác'} → ${b.paymentSummary}`);
+            if (Number(correction.original.khachDaTra) !== Number(b.khachDaTra) && correction.original.khachDaTra != null) changes.push(`Khách đã trả ${formatVND(correction.original.khachDaTra)} → ${formatVND(b.khachDaTra)}`);
+            correctionStatus.innerText = `Đã điều chỉnh: ${changes.join(' · ') || b.paymentSummary} · ${correction.reason} · ${new Date(correction.correctedAt).toLocaleString('vi-VN')}`;
+        } else correctionStatus.innerText = '';
         document.getElementById('paymentMethodCorrection').value = b.paymentSummary === 'Tiền mặt' ? 'Tiền mặt' : 'Chuyển khoản';
+        document.getElementById('paidAmountCorrection').value = formatVndInputValue(Number(b.khachDaTra) || 0);
         document.getElementById('paymentCorrectionReason').value = correction?.reason || '';
         document.getElementById('undoPaymentCorrectionButton').style.display = correction ? '' : 'none';
 
@@ -1387,6 +1391,8 @@
         return {
             paymentSummary: bill.paymentSummary,
             paymentDetails: bill.paymentDetails,
+            khachDaTra: Number(bill.khachDaTra) || 0,
+            conNo: Number(bill.conNo) || 0,
             valTienMat: Number(bill.valTienMat) || 0,
             valChuyenKhoan: Number(bill.valChuyenKhoan) || 0,
             tipChuyenKhoan: bill.tipChuyenKhoan ?? null,
@@ -1396,8 +1402,10 @@
         };
     }
 
-    function applyPaymentMethod(bill, method) {
-        const amount = Number(bill.khachDaTra) || 0;
+    function applyPaymentMethod(bill, method, amount) {
+        const methodChanged = method !== bill.paymentSummary;
+        bill.khachDaTra = amount;
+        bill.conNo = Math.max(0, (Number(bill.khachCanTra) || 0) - amount);
         if (method === 'Tiền mặt') {
             bill.valTienMat = amount;
             bill.valChuyenKhoan = 0;
@@ -1409,10 +1417,12 @@
             bill.paymentSummary = 'Chuyển khoản';
             bill.paymentDetails = `Chuyển khoản: ${formatVND(amount)}`;
         }
-        bill.tipChuyenKhoan = 0;
-        bill.bankReceived = null;
-        bill.bankReference = '';
-        bill.reconciliationNote = '';
+        if (methodChanged) {
+            bill.tipChuyenKhoan = 0;
+            bill.bankReceived = null;
+            bill.bankReference = '';
+            bill.reconciliationNote = '';
+        }
     }
 
     async function savePaymentCorrection() {
@@ -1420,15 +1430,19 @@
         const bill = activeBillId && billStore[activeBillId];
         if (!bill) return;
         const method = document.getElementById('paymentMethodCorrection').value;
+        const paidAmount = parseVndInput(document.getElementById('paidAmountCorrection').value);
         const reason = document.getElementById('paymentCorrectionReason').value.trim();
+        if (!Number.isSafeInteger(paidAmount) || paidAmount < 0) return alert('Vui lòng nhập số tiền khách đã trả hợp lệ, không âm và không có phần thập phân.');
         if (bill.bankGroupId && method !== 'Chuyển khoản') return alert('Bill đang thuộc một giao dịch liên kết. Hãy gỡ bill khỏi giao dịch trước khi chuyển sang tiền mặt.');
         if (!reason) return alert('Vui lòng nhập lý do điều chỉnh để có thể kiểm tra lại sau này.');
-        if (method === bill.paymentSummary && !bill.paymentCorrection) return alert('Phương thức được chọn đang giống dữ liệu hiện tại.');
-        if (!confirm(`Điều chỉnh bill ${bill.maHD} thành ${method}? Số liệu tổng quan sẽ được tính lại.`)) return;
+        const methodChanged = method !== bill.paymentSummary;
+        const amountChanged = paidAmount !== Number(bill.khachDaTra);
+        if (!methodChanged && !amountChanged) return alert('Phương thức và số tiền khách đã trả chưa thay đổi.');
+        if (!confirm(`Điều chỉnh bill ${bill.maHD}: khách đã trả ${formatVND(paidAmount)}, phương thức ${method}? Số liệu tổng quan sẽ được tính lại.`)) return;
 
         const before = structuredClone(bill);
         const original = bill.paymentCorrection?.original || captureOriginalPayment(bill);
-        applyPaymentMethod(bill, method);
+        applyPaymentMethod(bill, method, paidAmount);
         bill.paymentCorrection = {
             original,
             reason,
