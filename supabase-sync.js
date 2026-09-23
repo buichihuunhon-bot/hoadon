@@ -94,12 +94,14 @@ async function applyCloudSnapshot(row, backupLocal = false) {
     }
     if (changeAtStart !== cloudChangeNumber) throw new Error('Dữ liệu trên máy vừa thay đổi. Hãy kiểm tra lại Cloud trước khi tải xuống.');
     const files = content.importedFiles || [];
-    if (!await saveToLocalStorage(content.billStore, content.rawStore, files)) {
+    const groups = content.bankTransactionGroups || {};
+    if (!await saveToLocalStorage(content.billStore, content.rawStore, files, activePassphrase, groups)) {
         throw new Error('Không đủ dung lượng lưu trên trình duyệt. Dữ liệu trên máy chưa thay đổi.');
     }
     billStore = content.billStore;
     rawStore = content.rawStore;
     importedFiles = files;
+    bankTransactionGroups = groups;
     cloudRevision = row.revision;
     cloudDirty = false;
     cloudConflict = false;
