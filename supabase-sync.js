@@ -64,6 +64,7 @@ function applyRoleUI() {
     document.getElementById('bankReference').style.display = admin ? '' : 'none';
     document.getElementById('bankReadOnly').style.display = cloudRole === 'accountant' ? 'grid' : 'none';
     document.getElementById('bankSaveNote').style.display = admin ? '' : 'none';
+    document.getElementById('paymentCorrectionEditor').style.display = admin ? 'grid' : 'none';
 }
 
 function cloudError(error) {
